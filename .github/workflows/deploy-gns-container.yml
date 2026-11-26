@@ -43,7 +43,26 @@ jobs:
         working-directory: server
         run: ./tools/fetch-mihomo-linux.sh
 
-      - name: Deploy Worker and Container
+      - name: Generate probed edge artifacts
+        working-directory: server
+        env:
+          GNS_TOKEN: ${{ secrets.GNS_TOKEN }}
+          GNS_ADMIN_TOKEN: ${{ secrets.GNS_ADMIN_TOKEN }}
+          GNS_SOURCES_JSON: ${{ secrets.GNS_SOURCES_JSON }}
+          GNS_AI_STUDIO_API_KEY: ${{ secrets.GNS_AI_STUDIO_API_KEY }}
+          GNS_ANTIGRAVITY_TOKEN: ${{ secrets.GNS_ANTIGRAVITY_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p bin
+          curl -fL --connect-timeout 20 --max-time 180 \
+            -o bin/mihomo-linux-amd64-v1-v1.19.34.gz \
+            https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-linux-amd64-v1-v1.19.34.gz
+          echo '0c07340a01408d033dda4088ea2a4c1e4d82aeed7b2f84f7c046e93b6ff3290c  bin/mihomo-linux-amd64-v1-v1.19.34.gz' | sha256sum -c -
+          gzip -dc bin/mihomo-linux-amd64-v1-v1.19.34.gz > bin/mihomo
+          chmod +x bin/mihomo
+          MIHOMO_BIN="$GITHUB_WORKSPACE/server/bin/mihomo" node scripts/generate-once.mjs
+
+      - name: Deploy edge Worker
         working-directory: server
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

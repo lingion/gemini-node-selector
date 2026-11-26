@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "gns-container",
-  "main": "worker/index.js",
+  "name": "gns-edge",
+  "main": "edge-worker/index.js",
   "compatibility_date": "2026-11-26",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
@@ -10,33 +10,5 @@
       "pattern": "gns.qdp.qzz.io/*",
       "zone_name": "qdp.qzz.io"
     }
-  ],
-  "triggers": {
-    "crons": ["*/15 * * * *"]
-  },
-  "containers": [
-    {
-      "class_name": "GnsContainer",
-      "scheduling_policy": "durable_object",
-      "images": {
-        "base": {
-          "dockerfile": "./Dockerfile"
-        }
-      }
-    }
-  ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "GNS_CONTAINER",
-        "class_name": "GnsContainer"
-      }
-    ]
-  },
-  "exports": {
-    "GnsContainer": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    }
-  }
+  ]
 }

@@ -1,10 +1,10 @@
-# Gemini Node Selector on Cloudflare Containers
+# Gemini Node Selector on GitHub Actions and Cloudflare Workers
 
 ## Decision
 
-The probe engine must run inside a Linux container. It launches `mihomo`, creates local SOCKS listeners, uses SQLite, and performs the Google checks through each candidate proxy. A plain Worker cannot replace that runtime without reimplementing the supported proxy protocols.
+The probe engine must run inside a Linux environment. It launches `mihomo`, creates local SOCKS listeners, uses SQLite, and performs the Google checks through each candidate proxy. A plain Worker cannot replace that runtime without reimplementing the supported proxy protocols.
 
-The migration therefore keeps the existing Node probe service and moves it into a Cloudflare Container. A Worker with a Durable Object Container binding becomes the public control plane and scheduled refresh trigger. The existing `nodaroo-sub` Worker remains the public subscription facade and fallback cache.
+The production path therefore runs the existing Node probe service on a GitHub-hosted runner, generates a checked artifact, and deploys that artifact to a normal Cloudflare Worker. The existing `nodaroo-sub` Worker remains the public subscription facade and fallback cache.
 
 ```text
 Clash / admin client
@@ -13,10 +13,10 @@ Clash / admin client
 existing nodaroo-sub Worker  ---- fallback YAML cache
         |
         v
-new gns-container Worker
+gns-edge Worker
         |
         v
-Durable Object -> Cloudflare Container (Node 24 + mihomo + SQLite)
+GitHub Actions scheduled probe (Node 24 + mihomo + SQLite)
         |
         +-- airport subscriptions
         +-- mihomo per-node probes
@@ -34,9 +34,9 @@ Durable Object -> Cloudflare Container (Node 24 + mihomo + SQLite)
 
 ## Files added or changed
 
-- `Dockerfile`: builds a Linux AMD64 image, installs Node dependencies, downloads the pinned mihomo release, and verifies its SHA-256 before installation.
-- `worker/index.js`: starts and health-checks the container, forwards API requests, and triggers an asynchronous refresh every 15 minutes.
-- `wrangler.jsonc`: declares the Durable Object Container binding and the 15-minute Cron Trigger.
+- `scripts/generate-once.mjs`: runs the existing full probe pipeline and writes generated YAML plus the node ledger into the Worker module.
+- `edge-worker/index.js`: serves the generated YAML and ledger through the Cloudflare Worker.
+- `wrangler.jsonc`: declares the `gns.qdp.qzz.io/*` Worker Route.
 - `src/main.mjs`: adds runtime environment overrides while preserving local JSON defaults.
 
 ## Secrets required before deployment
@@ -54,9 +54,9 @@ The source subscription URLs remain in `server/config/sources.json`; they should
 
 1. GitHub Actions checks out the repository and runs the seven Node tests.
 2. The runner downloads and verifies the Linux AMD64 mihomo archive.
-3. The runner builds the image with Docker and runs `wrangler deploy`.
-4. The `gns.qdp.qzz.io/*` Worker Route sends requests to the new Container Worker.
-5. The workflow writes the four Worker secrets from GitHub repository secrets.
-6. Verify `/healthz`, `/sub/<token>`, `/status/<token>`, `/admin/nodes`, and an asynchronous `/admin/refresh?reprobe=1`.
+3. The runner runs `scripts/generate-once.mjs` with the source and probe secrets.
+4. The runner deploys the generated edge Worker with `wrangler deploy`.
+5. The `gns.qdp.qzz.io/*` Worker Route serves the generated YAML and ledger.
+6. Verify `/healthz`, `/sub/<token>`, `/status/<token>`, and `/admin/nodes`.
 
-The workflow is designed so Docker and Wrangler run only on the GitHub-hosted runner. No local Docker daemon or local mihomo artifact is required.
+The workflow is designed so the probe and Wrangler deploy run only on the GitHub-hosted runner. No local Docker daemon or local mihomo artifact is required.

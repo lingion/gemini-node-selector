@@ -7,6 +7,7 @@ server/config/tunnel.token
 server/data/
 server/bin/mihomo
 server/bin/*.gz
+server/edge-worker/generated.mjs
 *.sqlite
 *.sqlite3
 *.log
