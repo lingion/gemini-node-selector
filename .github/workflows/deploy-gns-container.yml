@@ -1,4 +1,4 @@
-name: Deploy Gemini Node Selector
+name: Deploy Gemini Node Selector Edge
 
 on:
   push:

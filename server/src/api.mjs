@@ -41,7 +41,7 @@ function renderNodesHtml(nodes, statusMeta) {
         <td>AS${n.asn} ${escapeHtml(n.as_name)}</td>
         <td>${escapeHtml(n.facility_name)} (${escapeHtml(n.facility_confidence)})</td>
         <td>${escapeHtml(sources)}</td>
-        <td>AG:${badge(agTier)} / Gem:${badge(gemTier)} / Goo:${badge(gooTier)}</td>
+        <td>Claude:${badge(details.claude_tier || 'FAIL')} / AG:${badge(agTier)} / Gem:${badge(gemTier)} / Goo:${badge(gooTier)}</td>
         <td>API:${details.api_supported ? 'Y' : 'N'} App:${details.web_app_ok ? 'Y' : 'N'} Flag:${details.feature_flag ? 'Y' : 'N'} Clean:${details.google_clean ? 'Y' : 'N'} AG:${details.antigravity_endpoints_ok ? 'Y' : 'N'} Stable:${details.ip_stable ? 'Y' : 'N'} v6:${details.ipv6_clean !== false ? 'Y' : 'N'} Geo:${escapeHtml([details.geo_gemini, details.geo_terms, details.geo_youtube].filter(Boolean).join('/') || '-')}</td>
       </tr>`;
     })

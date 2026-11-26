@@ -119,6 +119,7 @@ export class Orchestrator {
         total_active_probed_nodes: config.proxies.length,
         antigravity_strict_nodes: countRealMembers('AntiGravity-严选'),
         antigravity_any_nodes: countRealMembers('AntiGravity-非严选'),
+        claude_strict_nodes: countRealMembers('Claude-严选'),
         gemini_strict_nodes: countRealMembers('Gemini-严选'),
         gemini_pass_nodes: countRealMembers('Gemini-非严选'),
         google_strict_nodes: countRealMembers('Google-严选'),

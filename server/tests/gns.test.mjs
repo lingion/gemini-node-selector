@@ -276,6 +276,75 @@ test('GroupBuilder separates AntiGravity, Gemini, Google into strict & non-stric
   assert.ok(agIdx >= 0 && gemIdx > agIdx && gooIdx > gemIdx);
 });
 
+test('Domestic, Microsoft, Apple, FCM and Claude rules are isolated and ordered before broad Google', () => {
+  const cfg = GroupBuilder.buildFromProbedNodes([{
+    success: true,
+    egress_ip: '16.179.53.161',
+    country_code: 'AU',
+    city: 'Sydney',
+    asn: 16509,
+    facility_name: 'AWS',
+    facility_confidence: 'A',
+    gemini_status: 'PASS',
+    gemini_tier: 'STRICT',
+    antigravity_tier: 'STRICT',
+    google_tier: 'STRICT',
+    claude_tier: 'STRICT',
+    meta: { proxyDict: { name: 'au', type: 'vless', server: '16.179.53.161', port: 443, uuid: 'u' } },
+  }]);
+
+  const names = new Set(cfg['proxy-groups'].map((g) => g.name));
+  for (const name of ['国内直连', '微软', 'Apple', 'FCM', 'Claude', 'Claude-严选', 'Claude-非严选']) {
+    assert.ok(names.has(name), `missing group ${name}`);
+  }
+
+  const index = (rule) => cfg.rules.indexOf(rule);
+  const domestic = index('GEOSITE,cn,国内直连');
+  const microsoft = index('GEOSITE,microsoft,微软');
+  const apple = index('GEOSITE,apple,Apple');
+  const fcm = index('DOMAIN-SUFFIX,fcm.googleapis.com,FCM');
+  const claude = index('DOMAIN,api.anthropic.com,Claude');
+  const google = index('GEOSITE,google,Google');
+
+  assert.ok(domestic >= 0);
+  assert.ok(domestic >= 0);
+  assert.ok(claude > domestic && microsoft > domestic && apple > domestic && fcm > domestic);
+  assert.ok(google > claude && google > microsoft && google > apple && google > fcm);
+  assert.ok(index('GEOIP,CN,国内直连') > claude);
+  assert.equal(cfg['proxy-groups'].find((g) => g.name === 'Claude-严选').proxies.length, 1);
+  assert.deepEqual(cfg['proxy-groups'].find((g) => g.name === 'Claude-非严选').proxies, ['REJECT']);
+  assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
+});
+
+test('Claude tier is fail-closed and independent from Gemini tier', () => {
+  const base = {
+    countryCode: 'US',
+    ipConsensus: true,
+    ipStable: true,
+    ipv6Clean: true,
+    details: {
+      google_reachable: true,
+      google_clean: true,
+      api_supported: true,
+      web_app_ok: true,
+      feature_flag: true,
+      oauth_reachable: true,
+      antigravity_endpoints_ok: true,
+      geo_gemini: 'USA',
+      geo_terms: 'USA',
+      geo_youtube: 'USA',
+      claude_api_ok: true,
+      claude_web_ok: true,
+      claude_platform_ok: true,
+      claude_sso_ok: true,
+      load_code_assist_status: 'SKIPPED',
+    },
+  };
+  assert.equal(evaluateNodeTiers(base).claude_tier, 'STRICT');
+  assert.equal(evaluateNodeTiers({ ...base, details: { ...base.details, claude_platform_ok: false } }).claude_tier, 'FAIL');
+  assert.equal(evaluateNodeTiers({ ...base, countryCode: 'CN' }).claude_tier, 'FAIL');
+});
+
 test('Orchestrator deduplicates concurrent refreshes and falls back to last valid YAML on error', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gns-test-'));
   try {

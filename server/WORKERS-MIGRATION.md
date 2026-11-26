@@ -28,8 +28,8 @@ GitHub Actions scheduled probe (Node 24 + mihomo + SQLite)
 
 - `src/probe_runner.mjs` requires `child_process`, `net`, temporary files, and a Linux `mihomo` binary.
 - `src/storage.mjs` uses `node:sqlite` and a persistent filesystem path.
-- `src/main.mjs` now accepts `GNS_HOST`, `GNS_PORT`, `GNS_TOKEN`, `GNS_ADMIN_TOKEN`, `GNS_AI_STUDIO_API_KEY`, and `GNS_ANTIGRAVITY_TOKEN` from the container environment.
-- The container uses the `standard-2` instance size because the existing Nodaroo service was provisioned with 6 GiB and runs up to five concurrent probe workers.
+- `src/main.mjs` and `scripts/generate-once.mjs` accept `GNS_TOKEN`, `GNS_ADMIN_TOKEN`, `GNS_SOURCES_JSON`, `GNS_AI_STUDIO_API_KEY`, and `GNS_ANTIGRAVITY_TOKEN` from the GitHub Actions environment.
+- The GitHub runner uses the same Linux Node 24 + mihomo runtime for every scheduled probe, so no local Mac or paid Cloudflare Container is required.
 - `nodaroo-sub` already serves the last-known-good YAML when the live origin is unavailable. Its current public fallback was verified on November 26, 2026 and returned 98,354 bytes with `x-gns-origin: worker-fallback-cache`.
 
 ## Files added or changed
@@ -41,10 +41,11 @@ GitHub Actions scheduled probe (Node 24 + mihomo + SQLite)
 
 ## Secrets required before deployment
 
-Set these as Worker secrets or container environment bindings. Do not commit them:
+Set these as GitHub repository secrets. Do not commit them:
 
 - `GNS_TOKEN`: subscription token used by `/sub/<token>` and `/status/<token>`.
 - `GNS_ADMIN_TOKEN`: admin token used by `/admin/nodes` and `/admin/refresh`.
+- `GNS_SOURCES_JSON`: JSON source configuration containing the private subscription URLs and self-built node definitions.
 - `GNS_AI_STUDIO_API_KEY`: optional authenticated AI Studio check.
 - `GNS_ANTIGRAVITY_TOKEN`: optional authenticated `loadCodeAssist` check.
 

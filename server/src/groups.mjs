@@ -27,6 +27,52 @@ function sanitizeName(name) {
  * and compiles 3-layer Mihomo strategy groups + rules with zero DIRECT leakage.
  */
 export class GroupBuilder {
+  static _buildGeneralServiceGroup(prefix, allNodes) {
+    const autoName = `${prefix}-自动选择`;
+    const fallbackName = `${prefix}-故障转移`;
+    const pool = allNodes.length > 0 ? [...allNodes] : ['REJECT'];
+    return [
+      {
+        name: prefix,
+        type: 'select',
+        proxies: [autoName, fallbackName, '节点选择', ...pool],
+      },
+      {
+        name: autoName,
+        type: 'url-test',
+        url: 'http://cp.cloudflare.com/generate_204',
+        interval: 300,
+        tolerance: 50,
+        proxies: pool,
+      },
+      {
+        name: fallbackName,
+        type: 'fallback',
+        url: 'http://cp.cloudflare.com/generate_204',
+        interval: 300,
+        proxies: pool,
+      },
+    ];
+  }
+
+  static _buildHardServiceGroups(prefix, strictList) {
+    const strictPool = strictList.length > 0 ? [...strictList] : ['REJECT'];
+    const autoName = `${prefix}-严选自动`;
+    const fbName = `${prefix}-严选故障转移`;
+    const strictName = `${prefix}-严选`;
+    const nonStrictName = `${prefix}-非严选`;
+    const top = strictList.length > 0
+      ? [autoName, fbName, strictName, nonStrictName]
+      : ['REJECT'];
+    return [
+      { name: prefix, type: 'select', proxies: top },
+      { name: autoName, type: 'url-test', url: 'http://cp.cloudflare.com/generate_204', interval: 300, tolerance: 50, proxies: strictPool },
+      { name: fbName, type: 'fallback', url: 'http://cp.cloudflare.com/generate_204', interval: 300, proxies: strictPool },
+      { name: strictName, type: 'select', proxies: strictPool },
+      { name: nonStrictName, type: 'select', proxies: ['REJECT'] },
+    ];
+  }
+
   static _buildTieredServiceGroups(prefix, strictList, fallbackList) {
     const anyList = [...strictList, ...fallbackList];
     const hasStrict = strictList.length > 0;
@@ -90,6 +136,7 @@ export class GroupBuilder {
     const geminiFallbackNodes = [];
     const googleStrictNodes = [];
     const googleFallbackNodes = [];
+    const claudeStrictNodes = [];
     const countryGroups = new Map();
     const facilityGroups = new Map();
     const asnGroups = new Map();
@@ -167,6 +214,9 @@ export class GroupBuilder {
               : 'FAIL');
       if (googleTier === 'STRICT') googleStrictNodes.push(baseName);
       else if (googleTier === 'FALLBACK') googleFallbackNodes.push(baseName);
+
+      const claudeTier = res.claude_tier || res.gemini_details?.claude_tier || 'FAIL';
+      if (claudeTier === 'STRICT') claudeStrictNodes.push(baseName);
     }
 
     const allProxyNames = activeNodes.map((n) => n.name);
@@ -203,6 +253,10 @@ export class GroupBuilder {
       ...GroupBuilder._buildTieredServiceGroups('AntiGravity', agStrictNodes, agFallbackNodes),
       ...GroupBuilder._buildTieredServiceGroups('Gemini', geminiStrictNodes, geminiFallbackNodes),
       ...GroupBuilder._buildTieredServiceGroups('Google', googleStrictNodes, googleFallbackNodes),
+      ...GroupBuilder._buildHardServiceGroups('Claude', claudeStrictNodes),
+      ...GroupBuilder._buildGeneralServiceGroup('微软', allProxyNames),
+      ...GroupBuilder._buildGeneralServiceGroup('Apple', allProxyNames),
+      ...GroupBuilder._buildGeneralServiceGroup('FCM', allProxyNames),
       {
         name: 'AI-Other',
         type: 'select',
@@ -287,6 +341,16 @@ export class GroupBuilder {
       ...adBlacklistRules,
       'GEOSITE,category-ads-all,广告拦截',
 
+      // Mainland and LAN rules come before all overseas service groups.
+      // Service-specific @cn rules below are narrower exceptions for Microsoft
+      // and Apple where the same vendor has both mainland and global endpoints.
+      'IP-CIDR,127.0.0.0/8,国内直连',
+      'IP-CIDR,172.16.0.0/12,国内直连',
+      'IP-CIDR,192.168.0.0/16,国内直连',
+      'IP-CIDR,10.0.0.0/8,国内直连',
+      'GEOIP,LAN,国内直连,no-resolve',
+      'GEOSITE,cn,国内直连',
+
       // 1. Strictest: AntiGravity / Gemini Code Assist endpoints BEFORE Gemini & broad Google
       'DOMAIN-SUFFIX,cloudaicompanion.googleapis.com,AntiGravity',
       'DOMAIN-SUFFIX,cloudcode-pa.googleapis.com,AntiGravity',
@@ -309,12 +373,83 @@ export class GroupBuilder {
       'DOMAIN-SUFFIX,deepmind.com,Gemini',
       'DOMAIN-SUFFIX,deepmind.google,Gemini',
 
+      // Claude Code / Claude web / Anthropic API. This group is hard-gated by
+      // api.anthropic.com + claude.ai + platform.claude.com + sso.claude.com.
+      'DOMAIN,api.anthropic.com,Claude',
+      'DOMAIN-SUFFIX,anthropic.com,Claude',
+      'DOMAIN-SUFFIX,claude.ai,Claude',
+      'DOMAIN,claude.com,Claude',
+      'DOMAIN,platform.claude.com,Claude',
+      'DOMAIN,sso.claude.com,Claude',
+      'DOMAIN,mcp-proxy.anthropic.com,Claude',
+      'DOMAIN,downloads.claude.ai,Claude',
+      'DOMAIN-SUFFIX,claudeusercontent.com,Claude',
+      'DOMAIN-SUFFIX,claudemcpcontent.com,Claude',
+      'DOMAIN,code.claude.com,Claude',
+      'DOMAIN,bridge.claudeusercontent.com,Claude',
+
       // Non-Gemini AI
       'GEOSITE,openai,AI-Other',
       'DOMAIN-SUFFIX,openai.com,AI-Other',
       'DOMAIN-SUFFIX,chatgpt.com,AI-Other',
       'DOMAIN-SUFFIX,anthropic.com,AI-Other',
-      'DOMAIN-SUFFIX,claude.ai,AI-Other',
+
+      // Microsoft: mainland-labelled geosite entries and official China domains
+      // stay DIRECT; the remaining Microsoft estate uses a dedicated group.
+      'GEOSITE,microsoft@cn,国内直连',
+      'DOMAIN-SUFFIX,microsoft.cn,国内直连',
+      'DOMAIN-SUFFIX,azure.cn,国内直连',
+      'DOMAIN-SUFFIX,office365.cn,国内直连',
+      'DOMAIN-SUFFIX,office.com.cn,国内直连',
+      'GEOSITE,microsoft,微软',
+      'DOMAIN-SUFFIX,microsoft.com,微软',
+      'DOMAIN-SUFFIX,microsoftonline.com,微软',
+      'DOMAIN-SUFFIX,office.com,微软',
+      'DOMAIN-SUFFIX,office365.com,微软',
+      'DOMAIN-SUFFIX,sharepoint.com,微软',
+      'DOMAIN-SUFFIX,teams.microsoft.com,微软',
+      'DOMAIN-SUFFIX,teams.cloud.microsoft,微软',
+      'DOMAIN-SUFFIX,live.com,微软',
+      'DOMAIN-SUFFIX,onedrive.com,微软',
+      'DOMAIN-SUFFIX,1drv.ms,微软',
+
+      // Apple: mainland-labelled geosite entries and China service domains
+      // stay DIRECT; global Apple CDN/iCloud/App Store traffic is isolated.
+      'GEOSITE,apple@cn,国内直连',
+      'DOMAIN-SUFFIX,apple.cn,国内直连',
+      'DOMAIN-SUFFIX,apple.com.cn,国内直连',
+      'GEOSITE,apple,Apple',
+      'DOMAIN-SUFFIX,apple.com,Apple',
+      'DOMAIN-SUFFIX,icloud.com,Apple',
+      'DOMAIN-SUFFIX,mzstatic.com,Apple',
+      'DOMAIN-SUFFIX,itunes.apple.com,Apple',
+      'DOMAIN-SUFFIX,apps.apple.com,Apple',
+      'DOMAIN-SUFFIX,apple-mapkit.com,Apple',
+
+      // FCM must precede broad Google rules. The official FCM host family is
+      // kept in its own group so it can be tested independently.
+      'GEOSITE,googlefcm,FCM',
+      'DOMAIN-SUFFIX,fcm.googleapis.com,FCM',
+      'DOMAIN-SUFFIX,iid.googleapis.com,FCM',
+      'DOMAIN-SUFFIX,firebaseinstallations.googleapis.com,FCM',
+      'DOMAIN-SUFFIX,mtalk.google.com,FCM',
+      'DOMAIN-SUFFIX,mtalk4.google.com,FCM',
+      'DOMAIN,alt1-mtalk.google.com,FCM',
+      'DOMAIN,alt2-mtalk.google.com,FCM',
+      'DOMAIN,alt3-mtalk.google.com,FCM',
+      'DOMAIN,alt4-mtalk.google.com,FCM',
+      'DOMAIN,alt5-mtalk.google.com,FCM',
+      'DOMAIN,alt6-mtalk.google.com,FCM',
+      'DOMAIN,alt7-mtalk.google.com,FCM',
+      'DOMAIN,alt8-mtalk.google.com,FCM',
+      'DOMAIN,mtalk-dev.google.com,FCM',
+      'DOMAIN,mtalk-staging.google.com,FCM',
+      'DOMAIN-SUFFIX,android.apis.google.com,FCM',
+      'DOMAIN-SUFFIX,device-provisioning.googleapis.com,FCM',
+
+      // Only apply China IP fallback after service-specific rules. This keeps
+      // Claude and other hard-routed services from being swallowed by GEOIP,CN.
+      'GEOIP,CN,国内直连',
 
       // 3. Streaming / Loosest Google (verified Google-reachable only) / Dev
       'GEOSITE,youtube,YouTube',
@@ -325,15 +460,6 @@ export class GroupBuilder {
       'GEOSITE,telegram,Telegram',
       'GEOIP,telegram,Telegram',
       'GEOSITE,github,GitHub',
-
-      // Domestic & LAN (DIRECT strictly isolated here)
-      'IP-CIDR,127.0.0.0/8,国内直连',
-      'IP-CIDR,172.16.0.0/12,国内直连',
-      'IP-CIDR,192.168.0.0/16,国内直连',
-      'IP-CIDR,10.0.0.0/8,国内直连',
-      'GEOIP,LAN,国内直连,no-resolve',
-      'GEOSITE,cn,国内直连',
-      'GEOIP,CN,国内直连',
 
       // Final Fallback (Never DIRECT!)
       'MATCH,漏网之鱼',

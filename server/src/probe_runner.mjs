@@ -28,6 +28,12 @@ export const SUPPORTED_ISO2_TO_ISO3 = {
 };
 export const SUPPORTED_ISO3 = new Set(Object.values(SUPPORTED_ISO2_TO_ISO3));
 
+// Anthropic publishes a wider supported-region list than Gemini. Keep this
+// separate so Claude does not inherit Gemini's narrower country allowlist.
+export const CLAUDE_SUPPORTED_ISO2 = new Set([
+  'AL','DZ','AD','AO','AG','AR','AM','AU','AT','AZ','BS','BH','BD','BB','BE','BZ','BJ','BT','BO','BA','BW','BR','BN','BG','BF','BI','CV','KH','CM','CA','TD','CL','CO','KM','CG','CR','CI','HR','CY','CZ','DK','DJ','DM','DO','EC','SV','GQ','EE','SZ','FJ','FI','FR','GA','GM','GE','DE','GH','GR','GD','GT','GN','GW','GY','HT','VA','HN','HU','IS','IN','ID','IQ','IE','IL','IT','JM','JP','JO','KZ','KE','KI','KW','KG','LA','LV','LB','LS','LR','LI','LT','LU','MG','MW','MY','MV','MT','MH','MR','MU','MX','FM','MD','MC','MN','ME','MA','MZ','NA','NR','NP','NL','NZ','NE','NG','MK','NO','OM','PK','PW','PS','PA','PG','PY','PE','PH','PL','PT','QA','RO','RW','KN','LC','VC','WS','SM','ST','SA','SN','RS','SC','SL','SK','SI','SB','ZA','KR','ES','LK','SR','SE','CH','TW','TJ','TZ','TH','TL','TG','TO','TT','TN','TR','TM','TV','UG','UA','AE','GB','US','UY','UZ','VU','ZM','ZW'
+]);
+
 const TERMS_COUNTRY_NAME_TO_ISO3 = {
   'united states': 'USA',
   'japan': 'JPN',
@@ -111,8 +117,8 @@ function hasGeminiFeatureFlag(html) {
 }
 
 /**
- * Pure deterministic tier classifier for AntiGravity (strictest) > Gemini (medium) > Google (loosest).
- * Each service yields 'STRICT' | 'FALLBACK' | 'FAIL'.
+ * Pure deterministic tier classifier for Claude, AntiGravity (strictest), Gemini (medium) and Google (loosest).
+ * Claude has its own hard gate and never falls back to a generic AI pool.
  */
 export function evaluateNodeTiers({ countryCode, ipConsensus, ipStable, ipv6Clean, details }) {
   const intelIso3 = iso2ToIso3(countryCode);
@@ -185,7 +191,24 @@ export function evaluateNodeTiers({ countryCode, ipConsensus, ipStable, ipv6Clea
     antigravityTier = ipStable && geoMatchesIntel ? 'STRICT' : 'FALLBACK';
   }
 
+  const claudeCountryOk = Boolean(
+    countryCode &&
+    !BLOCKED_ISO2.has(String(countryCode).toUpperCase()) &&
+    CLAUDE_SUPPORTED_ISO2.has(String(countryCode).toUpperCase())
+  );
+  const claudeHardOk = Boolean(
+    claudeCountryOk &&
+    ipConsensus &&
+    ipStable &&
+    ipv6Clean &&
+    details.claude_api_ok &&
+    details.claude_web_ok &&
+    details.claude_platform_ok &&
+    details.claude_sso_ok
+  );
+
   return {
+    claude_tier: claudeHardOk ? 'STRICT' : 'FAIL',
     google_tier: googleTier,
     gemini_tier: geminiTier,
     antigravity_tier: antigravityTier,
@@ -273,6 +296,7 @@ export class ProbeRunner {
             gemini_status: existing.gemini_status,
             gemini_tier: cachedDetails.gemini_tier || (existing.gemini_status === 'PASS' ? 'FALLBACK' : 'FAIL'),
             antigravity_tier: cachedDetails.antigravity_tier || 'FAIL',
+            claude_tier: cachedDetails.claude_tier || 'FAIL',
             google_tier: cachedDetails.google_tier || (cachedDetails.google_reachable ? 'FALLBACK' : 'FAIL'),
             gemini_details: cachedDetails,
             duration_ms: existing.duration_ms,
@@ -341,6 +365,10 @@ export class ProbeRunner {
         feature_flag: false,
         oauth_reachable: false,
         antigravity_endpoints_ok: false,
+        claude_api_ok: false,
+        claude_web_ok: false,
+        claude_platform_ok: false,
+        claude_sso_ok: false,
         load_code_assist_status: 'SKIPPED',
         google_reachable: false,
         google_clean: false,
@@ -411,6 +439,7 @@ export class ProbeRunner {
 
       // 3. Multi-Tier Gemini & Antigravity Probing ("能用上都用上")
       const geminiRes = await this.probeGeminiSuite(agent);
+      Object.assign(geminiRes, await this.probeClaudeSuite(agent));
       geminiRes.probe_version = PROBE_VERSION;
       geminiRes.ip_stable = result.ip_stable;
       geminiRes.ipv6_egress = result.ipv6_egress;
@@ -432,10 +461,12 @@ export class ProbeRunner {
       geminiRes.google_tier = tiers.google_tier;
       geminiRes.gemini_tier = tiers.gemini_tier;
       geminiRes.antigravity_tier = tiers.antigravity_tier;
+      geminiRes.claude_tier = tiers.claude_tier;
       result.gemini_details = geminiRes;
       result.gemini_status = tiers.gemini_status;
       result.gemini_tier = tiers.gemini_tier;
       result.antigravity_tier = tiers.antigravity_tier;
+      result.claude_tier = tiers.claude_tier;
       result.google_tier = tiers.google_tier;
     } catch (err) {
       result.gemini_details.error = err.message;
@@ -723,6 +754,37 @@ export class ProbeRunner {
     }
 
     return details;
+  }
+
+  async probeClaudeSuite(agent) {
+    const check = async (url, acceptedStatuses) => {
+      try {
+        const r = await fetch(url, {
+          dispatcher: agent,
+          headers: { 'User-Agent': 'claude-code-network-probe/1.0' },
+          signal: AbortSignal.timeout(9000),
+        });
+        await r.body?.cancel().catch(() => {});
+        return acceptedStatuses.includes(r.status);
+      } catch {
+        return false;
+      }
+    };
+
+    const [api, web, platform, sso] = await Promise.all([
+      // Claude Code's direct API endpoint normally answers unauthenticated probes with 401.
+      check('https://api.anthropic.com/v1/models', [200, 400, 401, 404, 405]),
+      check('https://claude.ai/', [200, 204, 301, 302, 307, 308]),
+      check('https://platform.claude.com/', [200, 204, 301, 302, 307, 308, 401, 404]),
+      check('https://sso.claude.com/', [200, 204, 301, 302, 307, 308, 401, 404]),
+    ]);
+
+    return {
+      claude_api_ok: api,
+      claude_web_ok: web,
+      claude_platform_ok: platform,
+      claude_sso_ok: sso,
+    };
   }
 
   async probeAllNodes(nodeMetas, forceReprobe = false) {
