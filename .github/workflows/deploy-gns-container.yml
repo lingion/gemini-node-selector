@@ -6,6 +6,8 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/deploy-gns-container.yml'
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 concurrency:
