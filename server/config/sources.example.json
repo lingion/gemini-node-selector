@@ -1,0 +1,22 @@
+{
+  "sources": [
+    {
+      "id": "airport_1_hy2",
+      "name": "Airport-1 (Hysteria2)",
+      "type": "subscription",
+      "url": "https://example.invalid/subscription-token",
+      "prefix": "[A1-HY2]",
+      "enabled": true,
+      "skip_cert_verify": false
+    },
+    {
+      "id": "airport_2_trojan",
+      "name": "Airport-2 (Trojan/WS)",
+      "type": "subscription",
+      "url": "https://example.invalid/subscription-token",
+      "prefix": "[A2-TR]",
+      "enabled": true,
+      "skip_cert_verify": true
+    }
+  ]
+}

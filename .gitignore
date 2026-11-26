@@ -1,0 +1,27 @@
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
+server/node_modules/
+server/config/tunnel.token
+server/data/
+server/bin/mihomo
+server/bin/*.gz
+*.sqlite
+*.sqlite3
+*.log
+.env
+.env.*
+
+# Legacy local implementation and generated state
+/app/
+/cli.py
+/config/
+/data/
+/bin/
+/tests/
+
+# Old imperative deployment helpers contain historical credentials or are superseded by CI
+/server/deploy_worker_proxy.py
+/server/remote-index.js.bak
+/server/supervisor_index.js

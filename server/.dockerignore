@@ -1,0 +1,9 @@
+node_modules
+tests
+worker
+*.sqlite
+*.sqlite3
+*.log
+Dockerfile*
+wrangler.jsonc
+WORKERS-MIGRATION.md

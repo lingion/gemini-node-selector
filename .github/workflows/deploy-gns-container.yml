@@ -1,0 +1,76 @@
+name: Deploy Gemini Node Selector
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-gns-container.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-gns-container
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run server tests
+        working-directory: server
+        run: node --test
+
+      - name: Fetch and verify Linux mihomo
+        working-directory: server
+        run: ./tools/fetch-mihomo-linux.sh
+
+      - name: Deploy Worker and Container
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@latest deploy
+
+      - name: Configure runtime secrets
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GNS_TOKEN: ${{ secrets.GNS_TOKEN }}
+          GNS_ADMIN_TOKEN: ${{ secrets.GNS_ADMIN_TOKEN }}
+          GNS_SOURCES_JSON: ${{ secrets.GNS_SOURCES_JSON }}
+          GNS_AI_STUDIO_API_KEY: ${{ secrets.GNS_AI_STUDIO_API_KEY }}
+          GNS_ANTIGRAVITY_TOKEN: ${{ secrets.GNS_ANTIGRAVITY_TOKEN }}
+        run: |
+          set -euo pipefail
+          put_secret() {
+            name="$1"
+            value="$2"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | npx --yes wrangler@latest secret put "$name"
+            fi
+          }
+          put_secret GNS_TOKEN "$GNS_TOKEN"
+          put_secret GNS_ADMIN_TOKEN "$GNS_ADMIN_TOKEN"
+          put_secret GNS_SOURCES_JSON "$GNS_SOURCES_JSON"
+          put_secret GNS_AI_STUDIO_API_KEY "$GNS_AI_STUDIO_API_KEY"
+          put_secret GNS_ANTIGRAVITY_TOKEN "$GNS_ANTIGRAVITY_TOKEN"

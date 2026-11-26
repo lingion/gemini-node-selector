@@ -1,0 +1,32 @@
+{
+  "outbounds": [
+    {
+      "type": "socks",
+      "tag": "warp-masque-out",
+      "server": "127.0.0.1",
+      "server_port": 40000,
+      "version": "5"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "domain": [
+          "gemini.google.com",
+          "bard.google.com",
+          "aistudio.google.com",
+          "daily-cloudcode-pa.googleapis.com",
+          "oauth2.googleapis.com"
+        ],
+        "domain_suffix": [
+          "generativelanguage.googleapis.com",
+          "alkalimakersuite-pa.googleapis.com",
+          "proactivebackend-pa.googleapis.com",
+          "deepmind.com",
+          "deepmind.google"
+        ],
+        "outbound": "warp-masque-out"
+      }
+    ]
+  }
+}

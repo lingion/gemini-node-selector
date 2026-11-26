@@ -1,0 +1,40 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8089,
+    "token": "set-via-GNS_TOKEN-secret",
+    "external_url": "https://sub.qdp.qzz.io/gemini-selector"
+  },
+  "cache": {
+    "upstream_ttl_seconds": 900,
+    "gemini_pass_ttl_seconds": 1800,
+    "gemini_fail_ttl_seconds": 600,
+    "egress_ip_ttl_seconds": 1800,
+    "rdap_ttl_seconds": 86400,
+    "geoip_ttl_seconds": 86400,
+    "peeringdb_ttl_seconds": 604800
+  },
+  "gemini": {
+    "test_url": "https://gemini.google.com/",
+    "required_host": "gemini.google.com",
+    "required_path": "/app",
+    "timeout_seconds": 15
+  },
+  "routing": {
+    "enable_fake_ip": true,
+    "fake_ip_range": "198.18.0.1/16",
+    "tcp_concurrent": true,
+    "unified_delay": true
+  },
+  "probe": {
+    "max_workers": 5,
+    "base_port": 28000,
+    "startup_timeout_ms": 8000,
+    "http_timeout_ms": 12000,
+    "stability_delay_ms": 1200,
+    "ai_studio_api_key": "",
+    "antigravity_access_token": "",
+    "mihomo_version": "v1.19.34",
+    "mihomo_sha256": "0c07340a01408d033dda4088ea2a4c1e4d82aeed7b2f84f7c046e93b6ff3290c"
+  }
+}
