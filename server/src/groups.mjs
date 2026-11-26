@@ -62,8 +62,8 @@ export class GroupBuilder {
     const strictName = `${prefix}-严选`;
     const nonStrictName = `${prefix}-非严选`;
     const top = strictList.length > 0
-      ? [autoName, fbName, strictName, nonStrictName]
-      : ['REJECT'];
+      ? [strictName, '节点选择', '自动选择']
+      : ['节点选择', '自动选择', strictName];
     return [
       { name: prefix, type: 'select', proxies: top },
       { name: autoName, type: 'url-test', url: 'http://cp.cloudflare.com/generate_204', interval: 300, tolerance: 50, proxies: strictPool },

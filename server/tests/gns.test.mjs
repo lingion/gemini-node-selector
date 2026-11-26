@@ -313,7 +313,28 @@ test('Domestic, Microsoft, Apple, FCM and Claude rules are isolated and ordered 
   assert.ok(index('GEOIP,CN,国内直连') > google);
   assert.equal(cfg['proxy-groups'].find((g) => g.name === 'Claude-严选').proxies.length, 1);
   assert.deepEqual(cfg['proxy-groups'].find((g) => g.name === 'Claude-非严选').proxies, ['REJECT']);
+  assert.deepEqual(cfg['proxy-groups'].find((g) => g.name === 'Claude').proxies, ['Claude-严选', '节点选择', '自动选择']);
   assert.equal(cfg['proxy-groups'].find((g) => g.name === 'FCM').proxies[0], '国内直连');
+  assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
+});
+
+test('Claude top-level group falls back to general selection when Claude strict pool is empty', () => {
+  const cfg = GroupBuilder.buildFromProbedNodes([{
+    success: true,
+    egress_ip: '16.179.53.161',
+    country_code: 'AU',
+    city: 'Sydney',
+    asn: 16509,
+    facility_name: 'AWS',
+    facility_confidence: 'A',
+    gemini_status: 'PASS',
+    gemini_tier: 'STRICT',
+    antigravity_tier: 'STRICT',
+    google_tier: 'STRICT',
+    claude_tier: 'FAIL',
+    meta: { proxyDict: { name: 'au', type: 'vless', server: '16.179.53.161', port: 443, uuid: 'u' } },
+  }]);
+  assert.deepEqual(cfg['proxy-groups'].find((g) => g.name === 'Claude').proxies, ['节点选择', '自动选择', 'Claude-严选']);
   assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
 });
 
