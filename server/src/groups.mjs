@@ -447,9 +447,6 @@ export class GroupBuilder {
       'DOMAIN-SUFFIX,android.apis.google.com,FCM',
       'DOMAIN-SUFFIX,device-provisioning.googleapis.com,FCM',
 
-      // Only apply China IP fallback after service-specific rules. This keeps
-      // Claude and other hard-routed services from being swallowed by GEOIP,CN.
-      'GEOIP,CN,国内直连',
 
       // 3. Streaming / Loosest Google (verified Google-reachable only) / Dev
       'GEOSITE,youtube,YouTube',
@@ -460,6 +457,10 @@ export class GroupBuilder {
       'GEOSITE,telegram,Telegram',
       'GEOIP,telegram,Telegram',
       'GEOSITE,github,GitHub',
+
+      // Only apply China IP fallback after every service-specific rule,
+      // including broad Google/YouTube and development services.
+      'GEOIP,CN,国内直连',
 
       // Final Fallback (Never DIRECT!)
       'MATCH,漏网之鱼',

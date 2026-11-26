@@ -310,7 +310,7 @@ test('Domestic, Microsoft, Apple, FCM and Claude rules are isolated and ordered 
   assert.ok(domestic >= 0);
   assert.ok(claude > domestic && microsoft > domestic && apple > domestic && fcm > domestic);
   assert.ok(google > claude && google > microsoft && google > apple && google > fcm);
-  assert.ok(index('GEOIP,CN,国内直连') > claude);
+  assert.ok(index('GEOIP,CN,国内直连') > google);
   assert.equal(cfg['proxy-groups'].find((g) => g.name === 'Claude-严选').proxies.length, 1);
   assert.deepEqual(cfg['proxy-groups'].find((g) => g.name === 'Claude-非严选').proxies, ['REJECT']);
   assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
