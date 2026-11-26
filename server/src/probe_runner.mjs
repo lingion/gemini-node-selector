@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import yaml from 'js-yaml';
 import { ProxyAgent, fetch } from 'undici';
 
-export const PROBE_VERSION = 2;
+export const PROBE_VERSION = 3;
 
 const BLOCK_TEXT_REGEX = /not supported in your country|country_unavailable|not available in your region|isn.?t currently supported in your country|BardErrorInfo[^0-9]*1060/i;
 

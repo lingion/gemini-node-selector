@@ -313,6 +313,7 @@ test('Domestic, Microsoft, Apple, FCM and Claude rules are isolated and ordered 
   assert.ok(index('GEOIP,CN,国内直连') > google);
   assert.equal(cfg['proxy-groups'].find((g) => g.name === 'Claude-严选').proxies.length, 1);
   assert.deepEqual(cfg['proxy-groups'].find((g) => g.name === 'Claude-非严选').proxies, ['REJECT']);
+  assert.equal(cfg['proxy-groups'].find((g) => g.name === 'FCM').proxies[0], '国内直连');
   assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
 });
 

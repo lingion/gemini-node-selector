@@ -29,5 +29,6 @@
 
 - `Claude` 规则独立走 `Claude` 组；只允许同时通过四个 Claude 端点、出口国家、IP 共识、稳定性和 IPv6 纯度硬门的节点进入 `Claude-严选`。
 - `FCM` 规则排在宽泛 Google 规则之前，避免 FCM 长连接被 Google 总组吞掉。
+- FCM 组默认首选 `国内直连`：Firebase 官方说明 Android 推送长连接不能通过网络代理，代理只保留为注册/API 等流量的手动备用路径。
 - Microsoft 和 Apple 的 `@cn` geosite 规则与中国域名规则先于各自海外大组；未被中国子集明确覆盖的全球服务进入独立组。
 - `GEOSITE,cn` 与 `GEOIP,CN` 仍是最后的国内直连兜底；最终 `MATCH` 继续进入 `漏网之鱼`，不产生隐式 DIRECT。

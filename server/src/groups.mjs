@@ -27,7 +27,7 @@ function sanitizeName(name) {
  * and compiles 3-layer Mihomo strategy groups + rules with zero DIRECT leakage.
  */
 export class GroupBuilder {
-  static _buildGeneralServiceGroup(prefix, allNodes) {
+  static _buildGeneralServiceGroup(prefix, allNodes, leading = []) {
     const autoName = `${prefix}-自动选择`;
     const fallbackName = `${prefix}-故障转移`;
     const pool = allNodes.length > 0 ? [...allNodes] : ['REJECT'];
@@ -35,7 +35,7 @@ export class GroupBuilder {
       {
         name: prefix,
         type: 'select',
-        proxies: [autoName, fallbackName, '节点选择', ...pool],
+        proxies: [...leading, autoName, fallbackName, '节点选择', ...pool],
       },
       {
         name: autoName,
@@ -256,7 +256,7 @@ export class GroupBuilder {
       ...GroupBuilder._buildHardServiceGroups('Claude', claudeStrictNodes),
       ...GroupBuilder._buildGeneralServiceGroup('微软', allProxyNames),
       ...GroupBuilder._buildGeneralServiceGroup('Apple', allProxyNames),
-      ...GroupBuilder._buildGeneralServiceGroup('FCM', allProxyNames),
+      ...GroupBuilder._buildGeneralServiceGroup('FCM', allProxyNames, ['国内直连']),
       {
         name: 'AI-Other',
         type: 'select',
