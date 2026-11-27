@@ -27,13 +27,14 @@ Delivery:   Mihomo client -> subscription facade -> gns-edge
 
 - `scripts/generate-once.mjs`: runs the existing full probe pipeline and writes generated YAML plus the node ledger into the Worker module.
 - `edge-worker/index.js`: serves the generated YAML and ledger through the Cloudflare Worker.
-- `wrangler.jsonc`: declares the configured Worker route.
+- `wrangler.jsonc`: provides the public template for the deployment config.
 - `src/main.mjs`: adds runtime environment overrides while preserving local JSON defaults.
 
 ## Secrets required before deployment
 
 Set these as GitHub repository secrets. Do not commit them:
 
+- `GNS_EXTERNAL_URL`, `GNS_WORKER_ROUTE`, `GNS_WORKER_ZONE`: service URL, route pattern, and zone name. The runner writes the route into an ignored Wrangler config.
 - `GNS_TOKEN`: subscription token used by `/sub/<token>` and `/status/<token>`.
 - `GNS_ADMIN_TOKEN`: admin token used by `/admin/nodes` and `/admin/refresh`.
 - `GNS_SOURCES_JSON`: JSON source configuration containing the private subscription URLs and self-built node definitions.

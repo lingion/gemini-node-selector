@@ -27,3 +27,4 @@ server/edge-worker/generated.mjs
 /server/deploy_worker_proxy.py
 /server/remote-index.js.bak
 /server/supervisor_index.js
+/server/wrangler.private.json

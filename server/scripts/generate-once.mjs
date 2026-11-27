@@ -30,6 +30,7 @@ const binDir = path.join(root, 'bin');
 fs.mkdirSync(dataDir, { recursive: true });
 settings.server = {
   ...(settings.server || {}),
+  external_url: process.env.GNS_EXTERNAL_URL || settings.server?.external_url || '',
   token: process.env.GNS_TOKEN || settings.server?.token,
   admin_token: process.env.GNS_ADMIN_TOKEN || settings.server?.admin_token || process.env.GNS_TOKEN || settings.server?.token,
 };

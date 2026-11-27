@@ -3,12 +3,8 @@
   "name": "gns-edge",
   "main": "edge-worker/index.js",
   "compatibility_date": "2026-11-26",
-  "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true,
-  "routes": [
-    {
-      "pattern": "gns.qdp.qzz.io/*",
-      "zone_name": "qdp.qzz.io"
-    }
-  ]
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true
 }

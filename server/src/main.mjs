@@ -28,6 +28,7 @@ async function main() {
     ...(settings.server || {}),
     host: process.env.GNS_HOST || settings.server?.host || '127.0.0.1',
     port: Number(process.env.GNS_PORT || settings.server?.port || 8089),
+    external_url: process.env.GNS_EXTERNAL_URL || settings.server?.external_url || '',
     token: process.env.GNS_TOKEN || settings.server?.token,
     admin_token: process.env.GNS_ADMIN_TOKEN || settings.server?.admin_token || process.env.GNS_TOKEN || settings.server?.token,
   };

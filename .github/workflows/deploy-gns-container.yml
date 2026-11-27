@@ -33,6 +33,22 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
 
+      - name: Prepare private Worker route
+        working-directory: server
+        env:
+          GNS_WORKER_ROUTE: ${{ secrets.GNS_WORKER_ROUTE }}
+          GNS_WORKER_ZONE: ${{ secrets.GNS_WORKER_ZONE }}
+        run: |
+          set -eu
+          : "${GNS_WORKER_ROUTE:?Missing GNS_WORKER_ROUTE}" "${GNS_WORKER_ZONE:?Missing GNS_WORKER_ZONE}"
+          umask 077
+          node --input-type=module > wrangler.private.json <<'JS'
+          import { readFileSync } from 'node:fs';
+          const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
+          config.routes = [{ pattern: process.env.GNS_WORKER_ROUTE, zone_name: process.env.GNS_WORKER_ZONE }];
+          process.stdout.write(JSON.stringify(config));
+          JS
+
       - name: Install server dependencies
         working-directory: server
         run: npm ci
@@ -48,6 +64,7 @@ jobs:
       - name: Generate probed edge artifacts
         working-directory: server
         env:
+          GNS_EXTERNAL_URL: ${{ secrets.GNS_EXTERNAL_URL }}
           GNS_TOKEN: ${{ secrets.GNS_TOKEN }}
           GNS_ADMIN_TOKEN: ${{ secrets.GNS_ADMIN_TOKEN }}
           GNS_SOURCES_JSON: ${{ secrets.GNS_SOURCES_JSON }}
@@ -55,6 +72,7 @@ jobs:
           GNS_ANTIGRAVITY_TOKEN: ${{ secrets.GNS_ANTIGRAVITY_TOKEN }}
         run: |
           set -euo pipefail
+          : "${GNS_EXTERNAL_URL:?Missing GNS_EXTERNAL_URL}"
           mkdir -p bin
           curl -fL --connect-timeout 20 --max-time 180 \
             -o bin/mihomo-linux-amd64-v1-v1.19.34.gz \
@@ -62,14 +80,18 @@ jobs:
           echo '0c07340a01408d033dda4088ea2a4c1e4d82aeed7b2f84f7c046e93b6ff3290c  bin/mihomo-linux-amd64-v1-v1.19.34.gz' | sha256sum -c -
           gzip -dc bin/mihomo-linux-amd64-v1-v1.19.34.gz > bin/mihomo
           chmod +x bin/mihomo
-          MIHOMO_BIN="$GITHUB_WORKSPACE/server/bin/mihomo" node scripts/generate-once.mjs
+          MIHOMO_BIN="$GITHUB_WORKSPACE/server/bin/mihomo" node scripts/generate-once.mjs > /dev/null 2>&1 || { echo "::error::Subscription generation failed"; exit 1; }
 
       - name: Deploy edge Worker
         working-directory: server
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@latest deploy
+        run: |
+          npx --yes wrangler@latest deploy --config wrangler.private.json > /dev/null 2>&1 || {
+            echo "::error::Worker deployment failed"
+            exit 1
+          }
 
       - name: Configure runtime secrets
         working-directory: server
@@ -87,7 +109,10 @@ jobs:
             name="$1"
             value="$2"
             if [ -n "$value" ]; then
-              printf '%s' "$value" | npx --yes wrangler@latest secret put "$name"
+              printf '%s' "$value" | npx --yes wrangler@latest secret put "$name" --config wrangler.private.json > /dev/null 2>&1 || {
+                echo "::error::Failed to configure Worker secret $name"
+                exit 1
+              }
             fi
           }
           put_secret GNS_TOKEN "$GNS_TOKEN"

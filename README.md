@@ -50,6 +50,7 @@ GitHub Actions schedules a full probe at 00:00, 06:00, 12:00, and 18:00 UTC. An 
 | --- | --- | --- |
 | GitHub Actions secrets | `GNS_SOURCES_JSON` | Private upstream configuration. The generator requires a nonempty `sources` array. |
 | GitHub Actions secrets | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Deploy the Worker and configure runtime secrets. |
+| GitHub Actions secrets | `GNS_EXTERNAL_URL`, `GNS_WORKER_ROUTE`, `GNS_WORKER_ZONE` | Private service URL, Worker route pattern, and its Cloudflare zone. The runner generates the deployment configuration. |
 | GitHub Actions secrets | `GNS_TOKEN`, `GNS_ADMIN_TOKEN` | Authenticate subscription, status, and administrative requests to the edge Worker. |
 | Optional GitHub Actions secrets | `GNS_AI_STUDIO_API_KEY`, `GNS_ANTIGRAVITY_TOKEN` | Enable authenticated AI Studio and AntiGravity probes. |
 | Subscription facade Worker secrets, when used | `GNS_PUBLIC_TOKEN`, `GNS_EDGE_TOKEN` | Authenticate the client and the upstream request respectively. The latter matches the edge Worker's `GNS_TOKEN`. |

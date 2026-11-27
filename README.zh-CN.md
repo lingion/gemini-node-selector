@@ -51,6 +51,7 @@ GitHub Actions 按 `0 */6 * * *` 调度，对应台北时间每天 **02:00、08:
 | --- | --- | --- |
 | GitHub Actions Secrets | `GNS_SOURCES_JSON` | 私有上游订阅地址和自建节点定义。生成器要求 JSON 中含非空的 `sources` 数组 |
 | GitHub Actions Secrets | `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_API_TOKEN` | 向对应账号部署 Worker 并配置运行时密钥 |
+| GitHub Actions Secrets | `GNS_EXTERNAL_URL`、`GNS_WORKER_ROUTE`、`GNS_WORKER_ZONE` | 服务地址、Worker 路由匹配模式和对应的 Cloudflare 区域。部署时由 runner 生成配置 |
 | GitHub Actions Secrets | `GNS_TOKEN`、`GNS_ADMIN_TOKEN` | 边缘 Worker 的订阅、状态与管理访问凭据 |
 | GitHub Actions Secrets，可选 | `GNS_AI_STUDIO_API_KEY`、`GNS_ANTIGRAVITY_TOKEN` | 对 AI Studio 和 AntiGravity 追加带凭据的探测 |
 | 订阅入口 Worker 的 Secrets | `GNS_PUBLIC_TOKEN`、`GNS_EDGE_TOKEN` | 前者验证客户端，后者用于入口向边缘 Worker 取订阅，应与边缘的 `GNS_TOKEN` 对应 |
