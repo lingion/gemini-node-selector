@@ -11,7 +11,20 @@ import { Orchestrator } from '../src/orchestrator.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const settings = JSON.parse(fs.readFileSync(path.join(root, 'config/settings.json'), 'utf8'));
-const runtimeSources = JSON.parse(process.env.GNS_SOURCES_JSON || '{"sources":[]}');
+const rawSources = process.env.GNS_SOURCES_JSON;
+if (!rawSources) {
+  throw new Error('GNS_SOURCES_JSON is required; refusing to deploy with an empty or public source configuration');
+}
+
+let runtimeSources;
+try {
+  runtimeSources = JSON.parse(rawSources);
+} catch (err) {
+  throw new Error(`GNS_SOURCES_JSON is not valid JSON: ${err.message}`);
+}
+if (!runtimeSources || !Array.isArray(runtimeSources.sources) || runtimeSources.sources.length === 0) {
+  throw new Error('GNS_SOURCES_JSON must contain at least one source; refusing to deploy an empty subscription');
+}
 const dataDir = path.join(root, 'data');
 const binDir = path.join(root, 'bin');
 fs.mkdirSync(dataDir, { recursive: true });

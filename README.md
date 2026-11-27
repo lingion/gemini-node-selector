@@ -4,7 +4,7 @@ Node selector and dynamic Mihomo subscription generator for Gemini, AntiGravity,
 
 The probe pipeline runs in GitHub Actions on a Linux runner. It downloads and verifies mihomo, fetches the private source configuration from GitHub Secrets, probes each candidate through mihomo, and deploys the generated subscription plus node ledger to the Cloudflare Worker at `gns.qdp.qzz.io`.
 
-The public subscription facade remains `sub.qdp.qzz.io`. It keeps its fallback cache and forwards the Gemini selector routes to the generated edge Worker.
+The public subscription facade remains `sub.qdp.qzz.io`. It keeps its fallback cache and forwards the Gemini selector routes to the generated edge Worker. The Gemini selector, aggregate selector and status routes require the private user token stored in the Cloudflare Worker secret `GNS_PUBLIC_TOKEN`; the token is not committed to this repository.
 
 ## Routing groups
 
@@ -25,6 +25,6 @@ npm ci
 node --test
 ```
 
-The repository deliberately contains no real source subscription URLs, tunnel tokens, generated SQLite state or generated node YAML. Configure `GNS_SOURCES_JSON`, `GNS_TOKEN`, `GNS_ADMIN_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Secrets.
+The repository deliberately contains no real source subscription URLs, tunnel tokens, generated SQLite state or generated node YAML. `server/config/sources.json` is an empty public placeholder. Configure `GNS_SOURCES_JSON`, `GNS_TOKEN`, `GNS_ADMIN_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Secrets; the deployment fails closed if `GNS_SOURCES_JSON` is missing, invalid, or empty. The generated Worker accepts the subscription token and admin token independently.
 
 Rule sources and the Claude network hard gate are documented in [server/RULE-SOURCES.md](server/RULE-SOURCES.md). The deployment architecture is documented in [server/WORKERS-MIGRATION.md](server/WORKERS-MIGRATION.md).

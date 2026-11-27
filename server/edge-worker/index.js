@@ -31,7 +31,7 @@ function yaml(body) {
 
 function isAuthorized(request, url, env) {
   const provided = url.searchParams.get('token') || request.headers.get('x-admin-token') || '';
-  return Boolean(provided) && provided === (env.GNS_TOKEN || env.GNS_ADMIN_TOKEN);
+  return Boolean(provided) && [env.GNS_TOKEN, env.GNS_ADMIN_TOKEN].includes(provided);
 }
 
 export default {

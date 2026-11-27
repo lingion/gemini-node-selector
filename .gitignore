@@ -4,6 +4,7 @@ __pycache__/
 node_modules/
 server/node_modules/
 server/config/tunnel.token
+server/config/sources.local.json
 server/data/
 server/bin/mihomo
 server/bin/*.gz

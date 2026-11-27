@@ -4,7 +4,7 @@
 
 The probe engine must run inside a Linux environment. It launches `mihomo`, creates local SOCKS listeners, uses SQLite, and performs the Google checks through each candidate proxy. A plain Worker cannot replace that runtime without reimplementing the supported proxy protocols.
 
-The production path therefore runs the existing Node probe service on a GitHub-hosted runner every 6 hours, generates a checked artifact, and deploys that artifact to a normal Cloudflare Worker. The existing `nodaroo-sub` Worker remains the public subscription facade and fallback cache.
+The production path therefore runs the existing Node probe service on a GitHub-hosted runner every 6 hours, generates a checked artifact, and deploys that artifact to a normal Cloudflare Worker. The existing `nodaroo-sub` Worker remains the subscription facade and fallback cache; its Gemini selector, aggregate selector and status routes require the separate Cloudflare secret `GNS_PUBLIC_TOKEN`.
 
 ```text
 Clash / admin client
@@ -49,7 +49,7 @@ Set these as GitHub repository secrets. Do not commit them:
 - `GNS_AI_STUDIO_API_KEY`: optional authenticated AI Studio check.
 - `GNS_ANTIGRAVITY_TOKEN`: optional authenticated `loadCodeAssist` check.
 
-The source subscription URLs remain in `server/config/sources.json`; they should move to secrets or a protected binding before a production deployment if the Worker or image repository is shared.
+`server/config/sources.json` is an intentionally empty public placeholder. Real source subscription URLs and self-built node definitions are supplied only through the GitHub Secret `GNS_SOURCES_JSON`; the deployment script fails closed if that secret is missing, invalid, or empty.
 
 ## GitHub Actions deployment sequence
 
