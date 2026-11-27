@@ -312,7 +312,7 @@ export class ProbeRunner {
 
     const probeNode = structuredClone(node);
     probeNode.name = 'candidate';
-    // Inside the Nodaroo host container itself, route self-probe to container loopback if hairpin NAT is restricted
+    // If a self-built candidate points back to the probe host, prefer loopback when hairpin NAT is restricted
     if (probeNode.server === '16.179.53.161' && process.platform === 'linux' && fs.existsSync('/home/container/.xray-core-26.11.9/config.json')) {
       probeNode.server = '127.0.0.1';
     }

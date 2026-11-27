@@ -3,7 +3,7 @@
     "host": "127.0.0.1",
     "port": 8089,
     "token": "set-via-GNS_TOKEN-secret",
-    "external_url": "https://sub.qdp.qzz.io/gemini-selector"
+    "external_url": ""
   },
   "cache": {
     "upstream_ttl_seconds": 21600,
