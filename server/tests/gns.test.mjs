@@ -402,7 +402,7 @@ test('Orchestrator deduplicates concurrent refreshes and falls back to last vali
         }));
       },
     };
-    const settings = { cache: { upstream_ttl_seconds: 900 }, ads: {} };
+    const settings = { cache: { upstream_ttl_seconds: 21600 }, ads: {} };
     const orc = new Orchestrator({ fetcher, probeRunner, storage, mihomoBin: null, geodataDir: null, settings });
 
     // Fire 3 concurrent force-refreshes -> must coalesce to 1 fetch
@@ -460,7 +460,7 @@ test('API server enforces auth, redacts secrets, and serves valid YAML', async (
         }));
       },
     };
-    const settings = { server: { token: 'tok-test-123' }, cache: { upstream_ttl_seconds: 900 }, ads: {} };
+    const settings = { server: { token: 'tok-test-123' }, cache: { upstream_ttl_seconds: 21600 }, ads: {} };
     const orc = new Orchestrator({ fetcher, probeRunner, storage, mihomoBin: null, geodataDir: null, settings });
     await orc.generateSubscription({ forceRefresh: true });
     // Store simulated node row as ProbeRunner does

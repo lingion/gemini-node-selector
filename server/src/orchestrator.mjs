@@ -129,7 +129,7 @@ export class Orchestrator {
         mihomo_validated: !mihomoValidation.skipped,
       };
 
-      const subTtl = this.settings.cache?.upstream_ttl_seconds || 900;
+      const subTtl = this.settings.cache?.upstream_ttl_seconds || 21600;
       this.storage.setSubCache(cacheKey, renderedYaml, meta, subTtl);
 
       if (this.settings.generated_yaml_path) {

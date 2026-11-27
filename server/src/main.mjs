@@ -65,8 +65,8 @@ async function main() {
     });
   });
 
-  // Periodic background refresh every 15 minutes
-  const intervalMs = (settings.cache?.upstream_ttl_seconds || 900) * 1000;
+  // Periodic background refresh follows the configured upstream TTL.
+  const intervalMs = (settings.cache?.upstream_ttl_seconds || 21600) * 1000;
   setInterval(() => {
     orchestrator.generateSubscription({ forceRefresh: true }).catch((err) => {
       console.error('[gns] Scheduled refresh error:', err.message);

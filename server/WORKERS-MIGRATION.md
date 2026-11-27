@@ -4,7 +4,7 @@
 
 The probe engine must run inside a Linux environment. It launches `mihomo`, creates local SOCKS listeners, uses SQLite, and performs the Google checks through each candidate proxy. A plain Worker cannot replace that runtime without reimplementing the supported proxy protocols.
 
-The production path therefore runs the existing Node probe service on a GitHub-hosted runner, generates a checked artifact, and deploys that artifact to a normal Cloudflare Worker. The existing `nodaroo-sub` Worker remains the public subscription facade and fallback cache.
+The production path therefore runs the existing Node probe service on a GitHub-hosted runner every 6 hours, generates a checked artifact, and deploys that artifact to a normal Cloudflare Worker. The existing `nodaroo-sub` Worker remains the public subscription facade and fallback cache.
 
 ```text
 Clash / admin client
@@ -58,6 +58,6 @@ The source subscription URLs remain in `server/config/sources.json`; they should
 3. The runner runs `scripts/generate-once.mjs` with the source and probe secrets.
 4. The runner deploys the generated edge Worker with `wrangler deploy`.
 5. The `gns.qdp.qzz.io/*` Worker Route serves the generated YAML and ledger.
-6. Verify `/healthz`, `/sub/<token>`, `/status/<token>`, and `/admin/nodes`.
+6. Verify `/healthz`, `/sub/<token>`, `/status/<token>`, and `/admin/nodes`. Scheduled refresh runs at the top of every sixth UTC hour.
 
 The workflow is designed so the probe and Wrangler deploy run only on the GitHub-hosted runner. No local Docker daemon or local mihomo artifact is required.

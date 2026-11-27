@@ -6,7 +6,7 @@
     "external_url": "https://sub.qdp.qzz.io/gemini-selector"
   },
   "cache": {
-    "upstream_ttl_seconds": 900,
+    "upstream_ttl_seconds": 21600,
     "gemini_pass_ttl_seconds": 1800,
     "gemini_fail_ttl_seconds": 600,
     "egress_ip_ttl_seconds": 1800,

@@ -61,7 +61,7 @@ export default {
     }
     if (path === '/admin/refresh' && request.method === 'POST') {
       if (!isAuthorized(request, url, env)) return json({ error: 'Forbidden' }, 403);
-      return json({ accepted: false, message: 'Refresh runs from GitHub Actions on the 15-minute schedule.' }, 202);
+      return json({ accepted: false, message: 'Refresh runs from GitHub Actions every 6 hours.' }, 202);
     }
     return json({ error: 'Not found' }, 404);
   },
