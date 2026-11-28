@@ -137,6 +137,7 @@ export class GroupBuilder {
     const googleStrictNodes = [];
     const googleFallbackNodes = [];
     const claudeStrictNodes = [];
+    const gptStrictNodes = [];
     const countryGroups = new Map();
     const facilityGroups = new Map();
     const asnGroups = new Map();
@@ -217,6 +218,9 @@ export class GroupBuilder {
 
       const claudeTier = res.claude_tier || res.gemini_details?.claude_tier || 'FAIL';
       if (claudeTier === 'STRICT') claudeStrictNodes.push(baseName);
+
+      const gptTier = res.gpt_tier || res.gemini_details?.gpt_tier || 'FAIL';
+      if (gptTier === 'STRICT') gptStrictNodes.push(baseName);
     }
 
     const allProxyNames = activeNodes.map((n) => n.name);
@@ -254,6 +258,7 @@ export class GroupBuilder {
       ...GroupBuilder._buildTieredServiceGroups('Gemini', geminiStrictNodes, geminiFallbackNodes),
       ...GroupBuilder._buildTieredServiceGroups('Google', googleStrictNodes, googleFallbackNodes),
       ...GroupBuilder._buildHardServiceGroups('Claude', claudeStrictNodes),
+      ...GroupBuilder._buildHardServiceGroups('GPT', gptStrictNodes),
       ...GroupBuilder._buildGeneralServiceGroup('微软', allProxyNames),
       ...GroupBuilder._buildGeneralServiceGroup('Apple', allProxyNames),
       ...GroupBuilder._buildGeneralServiceGroup('FCM', allProxyNames, ['国内直连']),
@@ -388,10 +393,16 @@ export class GroupBuilder {
       'DOMAIN,code.claude.com,Claude',
       'DOMAIN,bridge.claudeusercontent.com,Claude',
 
-      // Non-Gemini AI
-      'GEOSITE,openai,AI-Other',
-      'DOMAIN-SUFFIX,openai.com,AI-Other',
-      'DOMAIN-SUFFIX,chatgpt.com,AI-Other',
+      // OpenAI / ChatGPT web, mobile & API. Hard-gated by 5-endpoint TLS probe
+      // to filter out nodes with TLS handshake ECONNRESET or 443 timeouts.
+      'GEOSITE,openai,GPT',
+      'DOMAIN-SUFFIX,openai.com,GPT',
+      'DOMAIN-SUFFIX,chatgpt.com,GPT',
+      'DOMAIN-SUFFIX,oaistatic.com,GPT',
+      'DOMAIN-SUFFIX,oaiusercontent.com,GPT',
+      'DOMAIN-SUFFIX,chat.com,GPT',
+
+      // Non-Gemini AI fallback
       'DOMAIN-SUFFIX,anthropic.com,AI-Other',
 
       // Microsoft: mainland-labelled geosite entries and official China domains

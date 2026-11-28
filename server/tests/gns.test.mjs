@@ -367,6 +367,80 @@ test('Claude tier is fail-closed and independent from Gemini tier', () => {
   assert.equal(evaluateNodeTiers({ ...base, countryCode: 'CN' }).claude_tier, 'FAIL');
 });
 
+test('GPT tier is fail-closed across all 5 endpoints and blocked regions', () => {
+  const base = {
+    countryCode: 'US',
+    ipConsensus: true,
+    ipStable: true,
+    ipv6Clean: true,
+    details: {
+      google_reachable: true,
+      google_clean: true,
+      api_supported: true,
+      web_app_ok: true,
+      feature_flag: true,
+      oauth_reachable: true,
+      antigravity_endpoints_ok: true,
+      geo_gemini: 'USA',
+      geo_terms: 'USA',
+      geo_youtube: 'USA',
+      gpt_web_ok: true,
+      gpt_backend_ok: true,
+      gpt_api_ok: true,
+      gpt_auth_ok: true,
+      gpt_mobile_ok: true,
+      gpt_region_blocked: false,
+      load_code_assist_status: 'SKIPPED',
+    },
+  };
+  assert.equal(evaluateNodeTiers(base).gpt_tier, 'STRICT');
+  assert.equal(evaluateNodeTiers({ ...base, details: { ...base.details, gpt_backend_ok: false } }).gpt_tier, 'FAIL');
+  assert.equal(evaluateNodeTiers({ ...base, details: { ...base.details, gpt_mobile_ok: false } }).gpt_tier, 'FAIL');
+  assert.equal(evaluateNodeTiers({ ...base, details: { ...base.details, gpt_region_blocked: true } }).gpt_tier, 'FAIL');
+  assert.equal(evaluateNodeTiers({ ...base, countryCode: 'HK' }).gpt_tier, 'FAIL');
+});
+
+test('GPT group uses strict pool when available and falls back when empty', () => {
+  const mk = (ip, cc, gptTier) => ({
+    success: true,
+    egress_ip: ip,
+    country_code: cc,
+    city: 'Singapore',
+    asn: 14061,
+    facility_name: 'DigitalOcean',
+    facility_confidence: 'A',
+    gemini_status: 'PASS',
+    gemini_tier: 'STRICT',
+    antigravity_tier: 'STRICT',
+    google_tier: 'STRICT',
+    claude_tier: 'FAIL',
+    gpt_tier: gptTier,
+    meta: { proxyDict: { name: ip, type: 'hysteria2', server: ip, port: 443, password: 'p' } },
+  });
+
+  const cfgWithStrict = GroupBuilder.buildFromProbedNodes([
+    mk('1.2.3.4', 'SG', 'STRICT'),
+    mk('5.6.7.8', 'DE', 'FAIL'),
+  ]);
+  assert.deepEqual(ConfigValidator.validateStructure(cfgWithStrict), []);
+  assert.deepEqual(cfgWithStrict['proxy-groups'].find((g) => g.name === 'GPT').proxies, ['GPT-严选', '节点选择', '自动选择']);
+  assert.equal(cfgWithStrict['proxy-groups'].find((g) => g.name === 'GPT-严选').proxies.length, 1);
+  assert.ok(cfgWithStrict['proxy-groups'].find((g) => g.name === 'GPT-严选').proxies[0].startsWith('SG-'));
+  assert.deepEqual(cfgWithStrict['proxy-groups'].find((g) => g.name === 'GPT-非严选').proxies, ['REJECT']);
+
+  const domesticIdx = cfgWithStrict.rules.indexOf('GEOSITE,cn,国内直连');
+  const gptIdx = cfgWithStrict.rules.indexOf('DOMAIN-SUFFIX,openai.com,GPT');
+  const googleIdx = cfgWithStrict.rules.indexOf('GEOSITE,google,Google');
+  assert.ok(gptIdx > domesticIdx && googleIdx > gptIdx);
+  assert.ok(cfgWithStrict.rules.includes('GEOSITE,openai,GPT'));
+  assert.ok(cfgWithStrict.rules.includes('DOMAIN-SUFFIX,chatgpt.com,GPT'));
+
+  const cfgEmpty = GroupBuilder.buildFromProbedNodes([mk('5.6.7.8', 'DE', 'FAIL')]);
+  assert.deepEqual(ConfigValidator.validateStructure(cfgEmpty), []);
+  assert.deepEqual(cfgEmpty['proxy-groups'].find((g) => g.name === 'GPT').proxies, ['节点选择', '自动选择', 'GPT-严选']);
+  assert.deepEqual(cfgEmpty['proxy-groups'].find((g) => g.name === 'GPT-严选').proxies, ['REJECT']);
+});
+
 test('Orchestrator deduplicates concurrent refreshes and falls back to last valid YAML on error', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gns-test-'));
   try {

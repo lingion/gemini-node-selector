@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import yaml from 'js-yaml';
 import { ProxyAgent, fetch } from 'undici';
 
-export const PROBE_VERSION = 3;
+export const PROBE_VERSION = 4;
 
 const BLOCK_TEXT_REGEX = /not supported in your country|country_unavailable|not available in your region|isn.?t currently supported in your country|BardErrorInfo[^0-9]*1060/i;
 
@@ -207,8 +207,26 @@ export function evaluateNodeTiers({ countryCode, ipConsensus, ipStable, ipv6Clea
     details.claude_sso_ok
   );
 
+  const gptCountryOk = Boolean(
+    countryCode &&
+    !BLOCKED_ISO2.has(String(countryCode).toUpperCase())
+  );
+  const gptHardOk = Boolean(
+    gptCountryOk &&
+    !details.gpt_region_blocked &&
+    ipConsensus &&
+    ipStable &&
+    ipv6Clean &&
+    details.gpt_web_ok &&
+    details.gpt_backend_ok &&
+    details.gpt_api_ok &&
+    details.gpt_auth_ok &&
+    details.gpt_mobile_ok
+  );
+
   return {
     claude_tier: claudeHardOk ? 'STRICT' : 'FAIL',
+    gpt_tier: gptHardOk ? 'STRICT' : 'FAIL',
     google_tier: googleTier,
     gemini_tier: geminiTier,
     antigravity_tier: antigravityTier,
@@ -297,6 +315,7 @@ export class ProbeRunner {
             gemini_tier: cachedDetails.gemini_tier || (existing.gemini_status === 'PASS' ? 'FALLBACK' : 'FAIL'),
             antigravity_tier: cachedDetails.antigravity_tier || 'FAIL',
             claude_tier: cachedDetails.claude_tier || 'FAIL',
+            gpt_tier: cachedDetails.gpt_tier || 'FAIL',
             google_tier: cachedDetails.google_tier || (cachedDetails.google_reachable ? 'FALLBACK' : 'FAIL'),
             gemini_details: cachedDetails,
             duration_ms: existing.duration_ms,
@@ -356,6 +375,8 @@ export class ProbeRunner {
       gemini_status: 'FAIL_CLOSED',
       gemini_tier: 'FAIL',
       antigravity_tier: 'FAIL',
+      claude_tier: 'FAIL',
+      gpt_tier: 'FAIL',
       google_tier: 'FAIL',
       gemini_details: {
         probe_version: PROBE_VERSION,
@@ -369,6 +390,12 @@ export class ProbeRunner {
         claude_web_ok: false,
         claude_platform_ok: false,
         claude_sso_ok: false,
+        gpt_web_ok: false,
+        gpt_backend_ok: false,
+        gpt_api_ok: false,
+        gpt_auth_ok: false,
+        gpt_mobile_ok: false,
+        gpt_region_blocked: false,
         load_code_assist_status: 'SKIPPED',
         google_reachable: false,
         google_clean: false,
@@ -439,7 +466,11 @@ export class ProbeRunner {
 
       // 3. Multi-Tier Gemini & Antigravity Probing ("能用上都用上")
       const geminiRes = await this.probeGeminiSuite(agent);
-      Object.assign(geminiRes, await this.probeClaudeSuite(agent));
+      const [claudeRes, gptRes] = await Promise.all([
+        this.probeClaudeSuite(agent),
+        this.probeOpenAISuite(agent),
+      ]);
+      Object.assign(geminiRes, claudeRes, gptRes);
       geminiRes.probe_version = PROBE_VERSION;
       geminiRes.ip_stable = result.ip_stable;
       geminiRes.ipv6_egress = result.ipv6_egress;
@@ -462,11 +493,13 @@ export class ProbeRunner {
       geminiRes.gemini_tier = tiers.gemini_tier;
       geminiRes.antigravity_tier = tiers.antigravity_tier;
       geminiRes.claude_tier = tiers.claude_tier;
+      geminiRes.gpt_tier = tiers.gpt_tier;
       result.gemini_details = geminiRes;
       result.gemini_status = tiers.gemini_status;
       result.gemini_tier = tiers.gemini_tier;
       result.antigravity_tier = tiers.antigravity_tier;
       result.claude_tier = tiers.claude_tier;
+      result.gpt_tier = tiers.gpt_tier;
       result.google_tier = tiers.google_tier;
     } catch (err) {
       result.gemini_details.error = err.message;
@@ -787,6 +820,54 @@ export class ProbeRunner {
     };
   }
 
+  async probeOpenAISuite(agent) {
+    const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    const geoBlockRe = /unsupported_country_region_territory|country, region, or territory not supported|not supported in your country/i;
+    const cfChallengeRe = /just a moment|cf-turnstile|attention required|checking your browser|enable javascript and cookies/i;
+    let regionBlocked = false;
+
+    const check = async (url, acceptedStatuses) => {
+      try {
+        const r = await fetch(url, {
+          dispatcher: agent,
+          headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(9000),
+        });
+        const cfMitigated = String(r.headers.get('cf-mitigated') || '').toLowerCase();
+        const body = (await r.text().catch(() => '')).slice(0, 1024);
+        if (r.status === 403 && geoBlockRe.test(body)) {
+          regionBlocked = true;
+          return false;
+        }
+        if (cfMitigated.includes('challenge') || cfChallengeRe.test(body)) {
+          return false;
+        }
+        return acceptedStatuses.includes(r.status);
+      } catch {
+        // Catches TLS handshake ECONNRESET, SSL cert errors, and 443 connect timeouts
+        return false;
+      }
+    };
+
+    const [web, backend, api, auth, mobile] = await Promise.all([
+      check('https://chatgpt.com/', [200, 204, 301, 302, 307, 308]),
+      check('https://chatgpt.com/backend-api/models', [200, 401]),
+      check('https://api.openai.com/v1/models', [200, 401]),
+      check('https://auth.openai.com/', [200, 204, 301, 302, 307, 308, 401, 404]),
+      check('https://ios.chat.openai.com/public-api/mobile/server_status/v1', [200]),
+    ]);
+
+    return {
+      gpt_web_ok: web,
+      gpt_backend_ok: backend,
+      gpt_api_ok: api,
+      gpt_auth_ok: auth,
+      gpt_mobile_ok: mobile,
+      gpt_region_blocked: regionBlocked,
+    };
+  }
+
   async probeAllNodes(nodeMetas, forceReprobe = false) {
     console.log(`[probe] Starting server-side probe across ${nodeMetas.length} candidate nodes (workers=${this.maxWorkers}, force=${forceReprobe})...`);
     const results = [];
@@ -835,6 +916,7 @@ export class ProbeRunner {
       `AG-any=${results.filter((r) => r.antigravity_tier === 'STRICT' || r.antigravity_tier === 'FALLBACK').length}, ` +
       `Gemini-strict=${results.filter((r) => r.gemini_tier === 'STRICT').length}, ` +
       `Gemini-any=${results.filter((r) => r.gemini_status === 'PASS').length}, ` +
+      `GPT-strict=${results.filter((r) => r.gpt_tier === 'STRICT').length}, ` +
       `Google-any=${results.filter((r) => r.google_tier === 'STRICT' || r.google_tier === 'FALLBACK').length}`
     );
     return results;
