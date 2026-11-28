@@ -1,0 +1,56 @@
+name: Probe GPT Node Errors (CI)
+
+on:
+  push:
+    branches: [ci/gpt-probe-diag]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-gpt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Fetch Linux mihomo
+        working-directory: server
+        run: |
+          set -euo pipefail
+          mkdir -p bin
+          curl -fL --connect-timeout 20 --max-time 180 \
+            -o bin/mihomo-linux-amd64-v1-v1.19.34.gz \
+            https://github.com/MetaCubeX/mihomo/releases/download/v1.19.34/mihomo-linux-amd64-v1-v1.19.34.gz
+          echo '0c07340a01408d033dda4088ea2a4c1e4d82aeed7b2f84f7c046e93b6ff3290c  bin/mihomo-linux-amd64-v1-v1.19.34.gz' | sha256sum -c -
+          gzip -dc bin/mihomo-linux-amd64-v1-v1.19.34.gz > bin/mihomo
+          chmod +x bin/mihomo
+
+      - name: Run GPT error probe across all nodes
+        working-directory: server
+        env:
+          GNS_SOURCES_JSON: ${{ secrets.GNS_SOURCES_JSON }}
+          GPT_PROBE_CONCURRENCY: "8"
+        run: |
+          MIHOMO_BIN="$GITHUB_WORKSPACE/server/bin/mihomo" node scripts/probe-gpt-ci.mjs
+
+      - name: Upload GPT probe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpt-probe-report
+          path: server/data/gpt-probe-report.json
+          retention-days: 3
