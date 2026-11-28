@@ -40,14 +40,16 @@ settings.probe = {
   antigravity_access_token: process.env.GNS_ANTIGRAVITY_TOKEN || '',
 };
 settings.generated_yaml_path = path.join(dataDir, 'generated-probed.yaml');
+settings.generated_singbox_path = path.join(dataDir, 'generated-probed.singbox.json');
 Normalizer.setHmacSecret(settings.server?.hmac_secret || settings.server?.token || 'gns-default-hmac');
 
 const mihomoBin = process.env.MIHOMO_BIN || path.join(binDir, 'mihomo');
+const singboxBin = process.env.SINGBOX_BIN || path.join(binDir, 'sing-box');
 const storage = new Storage(path.join(dataDir, 'state.sqlite3'));
 const fetcher = new SourceFetcher(path.join(root, 'config/sources.json'), runtimeSources);
 const ipIntel = new IpIntelligence(storage, settings.cache);
 const probeRunner = new ProbeRunner({ mihomoBin, ipIntel, storage, settings });
-const orchestrator = new Orchestrator({ fetcher, probeRunner, storage, mihomoBin, geodataDir: path.join(dataDir, 'mihomo-geodata'), settings });
+const orchestrator = new Orchestrator({ fetcher, probeRunner, storage, mihomoBin, singboxBin, geodataDir: path.join(dataDir, 'mihomo-geodata'), settings });
 const result = await orchestrator.generateSubscription({ forceRefresh: true, forceReprobe: true });
 const nodes = storage.getAllNodes().map((node) => ({
   ...node,
@@ -57,6 +59,7 @@ const nodes = storage.getAllNodes().map((node) => ({
 const edgeDir = path.join(root, 'edge-worker');
 fs.mkdirSync(edgeDir, { recursive: true });
 const generatedModule = 'export const generatedYaml = ' + JSON.stringify(result.yaml) + ';\n'
+  + 'export const generatedSingBox = ' + JSON.stringify(result.singbox) + ';\n'
   + 'export const generatedStatus = ' + JSON.stringify(result.meta, null, 2) + ';\n'
   + 'export const generatedNodes = ' + JSON.stringify(nodes, null, 2) + ';\n';
 fs.writeFileSync(path.join(edgeDir, 'generated.mjs'), generatedModule, 'utf8');

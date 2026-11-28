@@ -104,8 +104,9 @@ export function createApiServer({ orchestrator, storage, settings }) {
         return;
       }
 
-      if (p.startsWith('/sub/')) {
-        const tok = p.slice(5);
+      if (p.startsWith('/sub/') || p.startsWith('/singbox/')) {
+        const isSingBoxRoute = p.startsWith('/singbox/') || (u.searchParams.get('format') || '').toLowerCase() === 'singbox';
+        const tok = p.startsWith('/singbox/') ? p.slice(9) : p.slice(5);
         if (!safeTokenEqual(tok, subToken)) {
           res.writeHead(403, { 'Content-Type': 'text/plain' });
           res.end('Forbidden');
@@ -113,20 +114,22 @@ export function createApiServer({ orchestrator, storage, settings }) {
         }
         const stale = storage.getSubCache('sub_probed_clash_yaml', true);
         const fresh = storage.getSubCache('sub_probed_clash_yaml', false);
+        const staleSb = storage.getSubCache('sub_probed_singbox_json', true);
+        const freshSb = storage.getSubCache('sub_probed_singbox_json', false);
         let result;
-        if (fresh) {
-          result = { yaml: fresh.value, meta: { ...fresh.meta, cached: true, stale: false } };
-        } else if (stale && u.searchParams.get('sync') !== '1') {
+        if (fresh && (!isSingBoxRoute || freshSb)) {
+          result = { yaml: fresh.value, singbox: freshSb?.value || null, meta: { ...fresh.meta, cached: true, stale: false } };
+        } else if (stale && (!isSingBoxRoute || staleSb) && u.searchParams.get('sync') !== '1') {
           // Trigger background refresh while immediately returning last valid YAML so clients don't timeout
           orchestrator.generateSubscription({ forceRefresh: true }).catch((e) => console.error('[bg-refresh]', e.message));
-          result = { yaml: stale.value, meta: { ...stale.meta, cached: true, stale: true } };
+          result = { yaml: stale.value, singbox: staleSb?.value || null, meta: { ...stale.meta, cached: true, stale: true } };
         } else {
           result = await orchestrator.generateSubscription({ forceRefresh: true });
         }
 
         res.writeHead(200, {
-          'Content-Type': 'text/yaml; charset=utf-8',
-          'Content-Disposition': 'attachment; filename="Gemini-Node-Selector.yaml"',
+          'Content-Type': isSingBoxRoute ? 'application/json; charset=utf-8' : 'text/yaml; charset=utf-8',
+          'Content-Disposition': isSingBoxRoute ? 'attachment; filename="Gemini-Node-Selector.singbox.json"' : 'attachment; filename="Gemini-Node-Selector.yaml"',
           'Profile-Update-Interval': '24',
           'Subscription-Userinfo': 'upload=0; download=0; total=1073741824000; expire=1893456000',
           'Cache-Control': 'private, no-store',
@@ -134,7 +137,7 @@ export function createApiServer({ orchestrator, storage, settings }) {
           'X-GNS-Stale': String(Boolean(result.meta?.stale)),
           'X-GNS-Generated-At': String(result.meta?.generated_at || ''),
         });
-        res.end(result.yaml);
+        res.end(isSingBoxRoute ? result.singbox : result.yaml);
         return;
       }
 

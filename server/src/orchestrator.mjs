@@ -3,6 +3,7 @@ import yaml from 'js-yaml';
 import { Parser } from './parser.mjs';
 import { Normalizer } from './normalizer.mjs';
 import { GroupBuilder } from './groups.mjs';
+import { SingBoxBuilder } from './singbox.mjs';
 import { ConfigValidator } from './validator.mjs';
 
 /**
@@ -10,11 +11,12 @@ import { ConfigValidator } from './validator.mjs';
  * structural + mihomo -t validation, and atomic cache promotion with fallback.
  */
 export class Orchestrator {
-  constructor({ fetcher, probeRunner, storage, mihomoBin, geodataDir, settings }) {
+  constructor({ fetcher, probeRunner, storage, mihomoBin, singboxBin = null, geodataDir, settings }) {
     this.fetcher = fetcher;
     this.probeRunner = probeRunner;
     this.storage = storage;
     this.mihomoBin = mihomoBin;
+    this.singboxBin = singboxBin;
     this.geodataDir = geodataDir;
     this.settings = settings;
     this.inflight = null;
@@ -29,10 +31,12 @@ export class Orchestrator {
 
   async generateSubscription({ forceRefresh = false, forceReprobe = false } = {}) {
     const cacheKey = 'sub_probed_clash_yaml';
+    const singboxCacheKey = 'sub_probed_singbox_json';
     if (!forceRefresh && !forceReprobe) {
       const cached = this.storage.getSubCache(cacheKey, false);
       if (cached) {
-        return { yaml: cached.value, meta: { ...cached.meta, cached: true, stale: false } };
+        const cachedSb = this.storage.getSubCache(singboxCacheKey, true);
+        return { yaml: cached.value, singbox: cachedSb?.value || null, meta: { ...cached.meta, cached: true, stale: false } };
       }
     }
 
@@ -40,13 +44,13 @@ export class Orchestrator {
       return await this.inflight;
     }
 
-    this.inflight = this._runPipeline({ forceReprobe, cacheKey }).finally(() => {
+    this.inflight = this._runPipeline({ forceReprobe, cacheKey, singboxCacheKey }).finally(() => {
       this.inflight = null;
     });
     return await this.inflight;
   }
 
-  async _runPipeline({ forceReprobe, cacheKey }) {
+  async _runPipeline({ forceReprobe, cacheKey, singboxCacheKey }) {
     this.lastRunStatus.state = 'running';
     this.lastRunStatus.last_started_at = new Date().toISOString();
     this.lastRunStatus.last_error = null;
@@ -106,6 +110,20 @@ export class Orchestrator {
         throw new Error(`Mihomo native validation failed: ${mihomoValidation.error}`);
       }
 
+      const singBoxConfig = SingBoxBuilder.buildFromProbedNodes(probedResults, {
+        adWhitelist: this.settings.ads?.whitelist || [],
+        adBlacklist: this.settings.ads?.blacklist || [],
+      });
+      const sbStructErrors = ConfigValidator.validateSingBoxStructure(singBoxConfig);
+      if (sbStructErrors.length > 0) {
+        throw new Error(`Sing-box structure audit failed: ${sbStructErrors.join('; ')}`);
+      }
+      const renderedSingBox = JSON.stringify(singBoxConfig, null, 2);
+      const singboxValidation = await ConfigValidator.validateWithSingBox(renderedSingBox, this.singboxBin);
+      if (!singboxValidation.ok) {
+        throw new Error(`Sing-box native validation failed: ${singboxValidation.error}`);
+      }
+
       const countRealMembers = (groupName) => {
         const g = config['proxy-groups'].find((x) => x.name === groupName);
         return (g?.proxies || []).filter((n) => n !== 'REJECT').length;
@@ -128,18 +146,23 @@ export class Orchestrator {
         groups_count: config['proxy-groups'].length,
         upstream_counts: upstreamCounts,
         mihomo_validated: !mihomoValidation.skipped,
+        singbox_validated: !singboxValidation.skipped,
       };
 
       const subTtl = this.settings.cache?.upstream_ttl_seconds || 21600;
       this.storage.setSubCache(cacheKey, renderedYaml, meta, subTtl);
+      this.storage.setSubCache(singboxCacheKey, renderedSingBox, meta, subTtl);
 
       if (this.settings.generated_yaml_path) {
         fs.writeFileSync(this.settings.generated_yaml_path, renderedYaml, 'utf8');
       }
+      if (this.settings.generated_singbox_path) {
+        fs.writeFileSync(this.settings.generated_singbox_path, renderedSingBox, 'utf8');
+      }
 
       this.lastRunStatus.state = 'idle';
       this.lastRunStatus.last_finished_at = meta.generated_at;
-      return { yaml: renderedYaml, meta };
+      return { yaml: renderedYaml, singbox: renderedSingBox, meta };
     } catch (err) {
       this.lastRunStatus.state = 'error';
       this.lastRunStatus.last_error = err.message;
@@ -148,9 +171,11 @@ export class Orchestrator {
       // Section 12 Degradation: Serve last-known-good subscription on failure
       const fallback = this.storage.getSubCache(cacheKey, true);
       if (fallback) {
+        const fallbackSb = this.storage.getSubCache(singboxCacheKey, true);
         console.warn(`[orchestrator] Pipeline failed (${err.message}); returning stale fallback YAML.`);
         return {
           yaml: fallback.value,
+          singbox: fallbackSb?.value || null,
           meta: { ...fallback.meta, cached: true, stale: true, fallback_reason: err.message },
         };
       }

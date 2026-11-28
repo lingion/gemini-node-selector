@@ -1,4 +1,4 @@
-import { generatedYaml, generatedStatus, generatedNodes } from './generated.mjs';
+import { generatedYaml, generatedSingBox, generatedStatus, generatedNodes } from './generated.mjs';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
@@ -29,6 +29,24 @@ function yaml(body) {
   });
 }
 
+function singboxResponse(body) {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': 'attachment; filename="Gemini-Node-Selector.singbox.json"',
+      'access-control-allow-origin': '*',
+      'cache-control': 'private, no-store',
+      'profile-update-interval': '24',
+      'subscription-userinfo': 'upload=0; download=0; total=1073741824000; expire=1893456000',
+      'x-gns-origin': 'github-actions-cloud-probe',
+      'x-gns-cached': 'false',
+      'x-gns-stale': 'false',
+      'x-gns-generated-at': String(generatedStatus.generated_at || ''),
+    },
+  });
+}
+
 function isAuthorized(request, url, env) {
   const provided = url.searchParams.get('token') || request.headers.get('x-admin-token') || '';
   return Boolean(provided) && [env.GNS_TOKEN, env.GNS_ADMIN_TOKEN].includes(provided);
@@ -45,7 +63,15 @@ export default {
     if (path.startsWith('/sub/')) {
       const token = path.slice('/sub/'.length);
       if (!token || token !== env.GNS_TOKEN) return new Response('Forbidden', { status: 403 });
+      if ((url.searchParams.get('format') || '').toLowerCase() === 'singbox') {
+        return singboxResponse(generatedSingBox);
+      }
       return yaml(generatedYaml);
+    }
+    if (path.startsWith('/singbox/')) {
+      const token = path.slice('/singbox/'.length);
+      if (!token || token !== env.GNS_TOKEN) return new Response('Forbidden', { status: 403 });
+      return singboxResponse(generatedSingBox);
     }
     if (path.startsWith('/status/')) {
       const token = path.slice('/status/'.length);

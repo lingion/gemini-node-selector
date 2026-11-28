@@ -8,6 +8,7 @@ import yaml from 'js-yaml';
 import { Parser } from '../src/parser.mjs';
 import { Normalizer } from '../src/normalizer.mjs';
 import { GroupBuilder } from '../src/groups.mjs';
+import { SingBoxBuilder, toSingBoxOutbound } from '../src/singbox.mjs';
 import { ConfigValidator } from '../src/validator.mjs';
 import { Storage } from '../src/storage.mjs';
 import { Orchestrator } from '../src/orchestrator.mjs';
@@ -469,6 +470,104 @@ test('Generated config exposes transparent proxy ports and domain sniffer for mo
   assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
 });
 
+test('SingBoxBuilder aligns protocols, 3-layer groups, fail-closed pools, and 1.12+ DNS/route schema', () => {
+  const probed = [
+    {
+      success: true,
+      egress_ip: '16.179.53.161',
+      country_code: 'AU',
+      city: 'Sydney',
+      asn: 16509,
+      facility_name: 'AWS-ap-southeast-2',
+      facility_confidence: 'A',
+      gemini_status: 'PASS',
+      antigravity_tier: 'STRICT',
+      gemini_tier: 'STRICT',
+      google_tier: 'STRICT',
+      claude_tier: 'STRICT',
+      gpt_tier: 'STRICT',
+      meta: {
+        proxyDict: {
+          name: 'au',
+          type: 'vless',
+          server: '16.179.53.161',
+          port: 25843,
+          uuid: 'u1',
+          tls: true,
+          servername: 'addons.mozilla.org',
+          'client-fingerprint': 'firefox',
+          'reality-opts': { 'public-key': 'pbk1', 'short-id': 'sid1' },
+          flow: 'xtls-rprx-vision',
+        },
+      },
+    },
+    {
+      success: true,
+      egress_ip: '36.227.228.165',
+      country_code: 'TW',
+      city: 'Taipei',
+      asn: 3462,
+      facility_name: 'HiNet',
+      facility_confidence: 'B',
+      gemini_status: 'FAIL',
+      antigravity_tier: 'FAIL',
+      gemini_tier: 'FAIL',
+      google_tier: 'FALLBACK',
+      claude_tier: 'FAIL',
+      gpt_tier: 'STRICT',
+      meta: {
+        proxyDict: {
+          name: 'tw',
+          type: 'hysteria2',
+          server: 'tw.example',
+          port: 8443,
+          password: 'p1',
+          sni: 'tw.example',
+          'skip-cert-verify': true,
+          obfs: 'salamander',
+          'obfs-password': 'op1',
+        },
+      },
+    },
+  ];
+
+  const sb = SingBoxBuilder.buildFromProbedNodes(probed, {
+    adWhitelist: ['safe.example.com'],
+    adBlacklist: ['ads.example.com'],
+  });
+  assert.deepEqual(ConfigValidator.validateSingBoxStructure(sb), []);
+
+  const byTag = (t) => sb.outbounds.find((o) => o.tag === t);
+  assert.equal(byTag('AU-Sydney-AWS-ap-southeast-2-161-01').tls.reality.public_key, 'pbk1');
+  assert.equal(byTag('AU-Sydney-AWS-ap-southeast-2-161-01').tls.utls.fingerprint, 'firefox');
+  assert.equal(byTag('TW-Taipei-HiNet-Inferred-165-01').obfs.type, 'salamander');
+  assert.equal(byTag('GPT-严选').outbounds.length, 2);
+  assert.equal(byTag('Claude-严选').outbounds.length, 1);
+  assert.equal(byTag('FCM').default, '国内直连');
+  assert.equal(sb.route.default_domain_resolver, 'dns-direct');
+  assert.equal(sb.inbounds.find((i) => i.type === 'tproxy').listen_port, 7893);
+  assert.equal(sb.experimental.clash_api.external_controller, '127.0.0.1:9090');
+
+  // Empty tiered pools must fail closed with route action: reject (no deprecated block outbound)
+  const emptyTiered = SingBoxBuilder.buildFromProbedNodes([{
+    ...probed[1],
+    google_tier: 'FAIL',
+    gpt_tier: 'FAIL',
+  }]);
+  assert.deepEqual(ConfigValidator.validateSingBoxStructure(emptyTiered), []);
+  assert.equal(emptyTiered.outbounds.some((o) => o.tag === 'Gemini'), false);
+  assert.equal(emptyTiered.outbounds.some((o) => o.type === 'block'), false);
+  const gemRule = emptyTiered.route.rules.find((r) => (r.domain || []).includes('gemini.google.com'));
+  assert.equal(gemRule.action, 'reject');
+  const gptGrp = emptyTiered.outbounds.find((o) => o.tag === 'GPT');
+  assert.deepEqual(gptGrp.outbounds, ['节点选择', '自动选择']);
+
+  // Verify trojan, vmess, ss conversions
+  assert.equal(toSingBoxOutbound({ type: 'trojan', server: 'a.com', port: 443, password: 'pw', network: 'ws', 'ws-opts': { path: '/ws', headers: { Host: 'h.com' } } }, 't1').transport.type, 'ws');
+  assert.equal(toSingBoxOutbound({ type: 'vmess', server: 'b.com', port: 443, uuid: 'u', cipher: 'auto', alterId: 0, tls: true }, 'v1').type, 'vmess');
+  assert.equal(toSingBoxOutbound({ type: 'ss', server: 'c.com', port: 8388, cipher: 'aes-256-gcm', password: 'pw' }, 's1').type, 'shadowsocks');
+});
+
 test('Orchestrator deduplicates concurrent refreshes and falls back to last valid YAML on error', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gns-test-'));
   try {
@@ -602,6 +701,16 @@ test('API server enforces auth, redacts secrets, and serves valid YAML', async (
     assert.equal(okSub.status, 200);
     const yamlTxt = await okSub.text();
     assert.ok(yaml.load(yamlTxt).proxies.length === 1);
+
+    const sbSub = await fetch(`${base}/singbox/tok-test-123`);
+    assert.equal(sbSub.status, 200);
+    const sbJson = await sbSub.json();
+    assert.deepEqual(ConfigValidator.validateSingBoxStructure(sbJson), []);
+
+    const sbQuery = await fetch(`${base}/sub/tok-test-123?format=singbox`);
+    assert.equal(sbQuery.status, 200);
+    const sbQueryJson = await sbQuery.json();
+    assert.equal(sbQueryJson.route.final, '漏网之鱼');
 
     const adminNodes = await fetch(`${base}/admin/nodes?token=tok-test-123&format=json`);
     assert.equal(adminNodes.status, 200);

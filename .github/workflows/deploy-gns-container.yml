@@ -61,6 +61,10 @@ jobs:
         working-directory: server
         run: ./tools/fetch-mihomo-linux.sh
 
+      - name: Fetch and verify Linux sing-box
+        working-directory: server
+        run: ./tools/fetch-singbox-linux.sh
+
       - name: Generate probed edge artifacts
         working-directory: server
         env:
@@ -80,7 +84,7 @@ jobs:
           echo '0c07340a01408d033dda4088ea2a4c1e4d82aeed7b2f84f7c046e93b6ff3290c  bin/mihomo-linux-amd64-v1-v1.19.34.gz' | sha256sum -c -
           gzip -dc bin/mihomo-linux-amd64-v1-v1.19.34.gz > bin/mihomo
           chmod +x bin/mihomo
-          MIHOMO_BIN="$GITHUB_WORKSPACE/server/bin/mihomo" node scripts/generate-once.mjs > /dev/null 2>&1 || { echo "::error::Subscription generation failed"; exit 1; }
+          MIHOMO_BIN="$GITHUB_WORKSPACE/server/bin/mihomo" SINGBOX_BIN="$GITHUB_WORKSPACE/server/bin/sing-box" node scripts/generate-once.mjs > /dev/null 2>&1 || { echo "::error::Subscription generation failed"; exit 1; }
 
       - name: Deploy edge Worker
         working-directory: server

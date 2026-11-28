@@ -89,4 +89,86 @@ export class ConfigValidator {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   }
+
+  static validateSingBoxStructure(config) {
+    const errors = [];
+    for (const key of ['dns', 'inbounds', 'outbounds', 'route']) {
+      if (!config || !config[key]) errors.push(`Missing essential sing-box key: ${key}`);
+    }
+    const outbounds = config?.outbounds || [];
+    if (outbounds.length === 0) errors.push('No outbounds defined in sing-box configuration');
+
+    const tags = new Set();
+    for (const o of outbounds) {
+      if (!o?.tag) {
+        errors.push('Sing-box outbound missing tag');
+        continue;
+      }
+      if (tags.has(o.tag)) errors.push(`Duplicate sing-box outbound tag '${o.tag}'`);
+      tags.add(o.tag);
+      if (o.type === 'block' || o.type === 'dns') {
+        errors.push(`Deprecated sing-box outbound type '${o.type}' on '${o.tag}'`);
+      }
+    }
+
+    const allowedDirectTags = new Set(['FCM']);
+    for (const o of outbounds) {
+      if (o.type === 'selector' || o.type === 'urltest') {
+        const members = o.outbounds || [];
+        if (members.length === 0) {
+          errors.push(`Sing-box group '${o.tag}' has empty outbounds list`);
+        }
+        if (!allowedDirectTags.has(o.tag) && members.includes('国内直连')) {
+          errors.push(`CRITICAL VIOLATION: '国内直连' found inside sing-box group '${o.tag}'`);
+        }
+        for (const m of members) {
+          if (!tags.has(m)) {
+            errors.push(`Sing-box group '${o.tag}' references undefined outbound '${m}'`);
+          }
+        }
+        if (o.default && !members.includes(o.default)) {
+          errors.push(`Sing-box selector '${o.tag}' default '${o.default}' not in outbounds`);
+        }
+      }
+    }
+
+    const ruleSetTags = new Set((config?.route?.rule_set || []).map((r) => r?.tag).filter(Boolean));
+    if (config?.route?.final === '国内直连') {
+      errors.push('CRITICAL VIOLATION: sing-box route.final cannot route to 国内直连');
+    }
+    if (config?.route?.final && !tags.has(config.route.final)) {
+      errors.push(`Sing-box route.final targets undefined outbound '${config.route.final}'`);
+    }
+    for (const rule of config?.route?.rules || []) {
+      if (rule.outbound && !tags.has(rule.outbound)) {
+        errors.push(`Sing-box route rule targets undefined outbound '${rule.outbound}'`);
+      }
+      for (const rs of rule.rule_set || []) {
+        if (!ruleSetTags.has(rs)) {
+          errors.push(`Sing-box route rule references undefined rule_set '${rs}'`);
+        }
+      }
+    }
+    const dnsTags = new Set((config?.dns?.servers || []).map((s) => s?.tag).filter(Boolean));
+    if (config?.route?.default_domain_resolver && !dnsTags.has(config.route.default_domain_resolver)) {
+      errors.push(`Sing-box default_domain_resolver '${config.route.default_domain_resolver}' not in dns.servers`);
+    }
+
+    return errors;
+  }
+
+  static async validateWithSingBox(jsonString, singboxBin) {
+    if (!singboxBin || !fs.existsSync(singboxBin)) return { skipped: true, ok: true };
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gns-sb-validate-'));
+    const cfgFile = path.join(tmpDir, 'config.json');
+    try {
+      fs.writeFileSync(cfgFile, jsonString, 'utf8');
+      await execFileAsync(singboxBin, ['check', '-c', cfgFile], { timeout: 30000 });
+      return { skipped: false, ok: true };
+    } catch (err) {
+      return { skipped: false, ok: false, error: err.stderr || err.stdout || err.message };
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  }
 }

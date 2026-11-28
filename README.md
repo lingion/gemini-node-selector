@@ -1,60 +1,78 @@
-<h1 align="center">Gemini Node Selector</h1>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/runtime-Node.js%2024-417E38" alt="Node.js 24">
-  <img src="https://img.shields.io/badge/proxy-mihomo-325B88" alt="mihomo">
-  <img src="https://img.shields.io/badge/deploy-Cloudflare%20Workers-C45100" alt="Cloudflare Workers">
-</p>
-
-<p align="center">Probe proxy nodes in the cloud and generate a Mihomo profile with service-specific pools and routing rules for mainland China.</p>
+<h1 align="center">SWCC Node Selector</h1>
+<p align="center"><strong>Socialism with Chinese Characteristics Node Selector · 中国特色社会主义节点选择器</strong></p>
+<p align="center">Cloud-probed dual-core (Mihomo &amp; sing-box 1.12+) network routing and edge node quality orchestration system tailored for the Mainland China network environment.</p>
 
 <p align="center"><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
+## Overview
+
+**SWCC Node Selector** is an automated network observability, route-splitting, and configuration orchestration project engineered specifically for the real-world network conditions of Mainland China. Designed to support cross-border academic research, international developer collaboration, and multi-cloud service reliability, it continuously verifies egress quality in the cloud and compiles validated profiles for both **Mihomo** and **sing-box 1.12+**.
+
+Key capabilities:
+
+- **Dual-core profile parity:** Generates synchronized **Mihomo YAML** and **sing-box 1.12+ JSON** (using remote `.srs` rule sets, modern DNS server structs, `default_domain_resolver`, and action-based sniffing) from a single probe pass, verified natively by `mihomo -t` and `sing-box check`.
+- **Mainland-first traffic governance:** Prioritizes domestic direct routing for LAN, Mainland domains/IPs, localized Microsoft/Apple Mainland services, and Android FCM push channels to minimize latency and avoid unnecessary international hops.
+- **Multi-service egress verification:** Independently probes egress IP consensus, multi-round stability, IPv6 cleanliness, TLS handshake integrity, and service-level availability for international developer and AI research platforms (**OpenAI / GPT**, **Claude**, **Gemini**, **AntiGravity**, and **Google**).
+- **Transparent proxy ready:** Exposes `mixed` (`7890`), `redirect` (`7892`), `tproxy` (`7893`), DNS (`1053`), domain sniffing, and Clash API (`127.0.0.1:9090`) out of the box for Linux/Android TPROXY deployments (e.g., Box for Root, Surfing, AsteriskMETA, Zashboard).
+
 ## Quick start
 
-Add a remote profile in a Mihomo-compatible client. Paste the **full subscription URL** supplied privately by your deployment operator, refresh the profile, and enable rule mode. One profile includes the nodes, policy groups, and routing rules. The operator's status page shows the generation time (`generated_at`), active node count (`total_active_probed_nodes`), and strict pool sizes.
+Paste the private profile URL provided by your deployment operator into a compatible client and enable rule mode:
 
-## How nodes qualify
+- **Mihomo / Clash Meta clients:** `/sub/<token>`
+- **sing-box 1.12+ clients:** `/singbox/<token>` or `/sub/<token>?format=singbox`
+- **Deployment status:** `/status/<token>` (returns `generated_at`, active node count, and per-service strict pool sizes)
 
-AntiGravity, Gemini, and Google each have four selectors. The default is `严选自动` (automatic selection among strict nodes). If only fallback nodes qualify, the group defaults to `非严选`, which lists every node that meets the service minimum. If none qualify, the group returns `REJECT`.
+## Service quality gates
 
-| Service | Minimum for inclusion | Additional requirements for the strict pool |
-| --- | --- | --- |
-| AntiGravity | Pass the Gemini minimum, reach the backend, clear the Google challenge and IPv6 checks, obtain matching exit IPs across sources and at least two consistent Google region signals. With an OAuth token configured, pass the authenticated Code Assist probe. | Exit IP stays stable across rounds and the Google region matches the IP intelligence country. |
-| Gemini | Pass the API, web app, feature flag, and OAuth checks. No regional block. The IP country and at least one Google region signal must be known, and all observed countries must be allowed. | No Google challenge, consistent exit IP across sources and rounds, clean IPv6 check, and no conflicting Google region signals. |
-| Google | Reach Google through the candidate node. | No Google challenge and matching exit IPs across sources. |
+All candidate nodes are probed through isolated single-node runtime instances. Nodes are named from verified egress IP and facility intelligence rather than unverified upstream labels.
 
-**Claude has a separate strict pool.** The API, web app, developer platform, and SSO probes must all pass. The node must also meet the project's Claude country allowlist, exit IP consensus and stability checks, and IPv6 check. The selector offers `Claude-严选`, `节点选择` (manual), and `自动选择` (automatic). If the strict pool is empty, manual and automatic move to the front. Those general nodes have no guarantee of Claude access.
+| Service | Minimum / Hard Gate | Strict Pool Requirements | Empty-Pool Behavior |
+| --- | --- | --- | --- |
+| **GPT (OpenAI)** | Concurrent 5-endpoint TLS & reachability check (`chatgpt.com`, `backend-api`, `api.openai.com`, `auth.openai.com`, mobile status); rejects TLS `ECONNRESET`, 443 timeouts, Cloudflare challenges, and regional 403s. | Non-blocked egress country, exit IP consensus, multi-round IP stability, and clean IPv6 check. | Top-level `GPT` falls back to general selection; `GPT-严选` fails closed. |
+| **Claude (Anthropic)** | Concurrent 4-endpoint probe (`api.anthropic.com`, `claude.ai`, `platform.claude.com`, `sso.claude.com`). | Claude country allowlist, exit IP consensus, multi-round stability, and clean IPv6 check. | Top-level `Claude` falls back to general selection; `Claude-严选` fails closed. |
+| **AntiGravity** | Passes Gemini minimum, backend reachability, clean Google Search, IPv6 check, exit IP consensus, and at least two consistent Google region signals (plus authenticated `loadCodeAssist` when token is provided). | Stable exit IP across rounds and Google region matching IP intelligence country. | Fails closed (`REJECT` / `action: reject`). |
+| **Gemini** | Passes API, `/app` web check, feature flag, and OAuth reachability with no regional block; all observed countries must be allowed. | Clean Google Search, consistent and stable exit IP, clean IPv6, and non-conflicting Google region signals. | Fails closed (`REJECT` / `action: reject`). |
+| **Google** | Candidate node reaches Google over HTTPS. | Clean Google Search and exit IP consensus. | Fails closed (`REJECT` / `action: reject`). |
 
-## Mainland routing
+## Mainland China routing architecture
 
-| Traffic | Default route |
+| Traffic Category | Default Routing Policy |
 | --- | --- |
-| Microsoft and Apple | Mainland subsets and explicit mainland service domains go direct. Other matching services use their respective vendor groups. |
-| Firebase Cloud Messaging | Registration and Android push connections match the FCM group before broader Google rules. The group defaults to direct and can be changed in the client. |
-| Domestic and unmatched traffic | LAN and `GEOSITE,cn` match early. `GEOIP,CN` catches remaining mainland IPs. Unmatched connections use `漏网之鱼`, which defaults to the node selector. |
+| **LAN & Mainland Direct** | Private CIDRs, `LAN`, and `geosite:cn` match early and route to `国内直连` (`DIRECT`); `geoip:cn` catches remaining domestic IP traffic after all service rules. |
+| **Microsoft & Apple** | Mainland subsets (`microsoft@cn`, `apple@cn`) and explicit `.cn` / `.com.cn` endpoints stay `国内直连`; global endpoints route through dedicated `微软` and `Apple` groups. |
+| **Android Push (FCM)** | `googlefcm`, `fcm.googleapis.com`, and `mtalk` persistent endpoints match `FCM` before broad Google rules, defaulting to `国内直连` and switchable in the client. |
+| **International Developer & AI Services** | Strictly ordered: `AntiGravity` -> `Gemini` -> `Claude` -> `GPT` -> `YouTube` / `Google` / `Telegram` / `GitHub`. Unmatched overseas traffic enters `漏网之鱼` (never leaks to `DIRECT`). |
 
-See the [rule implementation](server/src/groups.mjs) and [routing sources](server/RULE-SOURCES.md).
+See [Mihomo builder](server/src/groups.mjs), [sing-box builder](server/src/singbox.mjs), and [routing sources](server/RULE-SOURCES.md).
 
-## Refresh and troubleshooting
+## Cloud refresh & verification
 
-GitHub Actions schedules a full probe at 00:00, 06:00, 12:00, and 18:00 UTC. An Ubuntu runner uses Node.js 24 and mihomo to fetch sources, probe exits, and validate the YAML. It deploys the resulting profile and node ledger to Cloudflare Workers. Clients read the last published result. The former Nodaroo server has been retired.
+GitHub Actions runs a scheduled full probe every 6 hours (`00:00`, `06:00`, `12:00`, `18:00` UTC) on Ubuntu with Node.js 24, Linux `mihomo`, and Linux `sing-box`:
 
-- **Client shows an older profile.** Compare the status page's `generated_at` with your last client refresh. The edge Worker advertises a 24-hour client update interval. Refresh manually to fetch a newer published profile.
-- **Run a new probe.** In GitHub Actions, open **Deploy Gemini Node Selector Edge** and choose **Run workflow**. A push to `main` affecting `server/**` or the workflow also triggers a run. The Worker's `/admin/refresh` endpoint reports the schedule.
-- **Inspect a deployment.** Its Worker exposes generation time at `/healthz`. Maintainers can inspect per-node results at `/admin/nodes` with the `x-admin-token` header.
+1. Fetches private upstream sources from Secrets and normalizes/deduplicates candidate nodes via HMAC fingerprints.
+2. Probes egress IP, ASN/facility metadata, and all service quality gates.
+3. Compiles both Mihomo YAML and sing-box 1.12+ JSON, runs structural audits plus native `mihomo -t` and `sing-box check`.
+4. Publishes verified artifacts to Cloudflare Workers.
+
+To run the local contract test suite (Node.js 24):
+
+```bash
+cd server && npm ci && node --test
+```
 
 ## Operator configuration
 
 | Store | Names | Purpose |
 | --- | --- | --- |
-| GitHub Actions secrets | `GNS_SOURCES_JSON` | Private upstream configuration. The generator requires a nonempty `sources` array. |
-| GitHub Actions secrets | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Deploy the Worker and configure runtime secrets. |
-| GitHub Actions secrets | `GNS_EXTERNAL_URL`, `GNS_WORKER_ROUTE`, `GNS_WORKER_ZONE` | Private service URL, Worker route pattern, and its Cloudflare zone. The runner generates the deployment configuration. |
-| GitHub Actions secrets | `GNS_TOKEN`, `GNS_ADMIN_TOKEN` | Authenticate subscription, status, and administrative requests to the edge Worker. |
-| Optional GitHub Actions secrets | `GNS_AI_STUDIO_API_KEY`, `GNS_ANTIGRAVITY_TOKEN` | Enable authenticated AI Studio and AntiGravity probes. |
-| Subscription facade Worker secrets, when used | `GNS_PUBLIC_TOKEN`, `GNS_EDGE_TOKEN` | Authenticate the client and the upstream request respectively. The latter matches the edge Worker's `GNS_TOKEN`. |
+| GitHub Actions Secrets | `GNS_SOURCES_JSON` | Private upstream subscription and self-hosted node definitions (non-empty `sources` array). |
+| GitHub Actions Secrets | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Deploy the edge Worker and synchronize runtime secrets. |
+| GitHub Actions Secrets | `GNS_EXTERNAL_URL`, `GNS_WORKER_ROUTE`, `GNS_WORKER_ZONE` | Private Worker URL, route pattern, and Cloudflare zone. |
+| GitHub Actions Secrets | `GNS_TOKEN`, `GNS_ADMIN_TOKEN` | Authentication tokens for `/sub`, `/singbox`, `/status`, and `/admin/nodes`. |
+| Optional Secrets | `GNS_AI_STUDIO_API_KEY`, `GNS_ANTIGRAVITY_TOKEN` | Enable authenticated AI Studio and AntiGravity checks. |
 
-The tracked [source configuration](server/config/sources.json) is an empty template. Keep upstream URLs, personal subscription links, and generated node profiles private.
+The tracked [sources.json](server/config/sources.json) is an empty template. Keep upstream credentials and personal profile URLs strictly private.
 
-See the [Actions workflow](.github/workflows/deploy-gns-container.yml) and [architecture notes](server/WORKERS-MIGRATION.md). To run the contract tests with Node.js 24 and project dependencies installed, run `node --test` from `server/`.
+## Compliance & usage statement
+
+This project is an open-source network engineering and multi-protocol routing orchestration tool intended solely for lawful network quality measurement, cross-border academic research, and enterprise/developer multi-cloud connectivity optimization. Users are responsible for complying with applicable local laws, regulations, and service terms.
