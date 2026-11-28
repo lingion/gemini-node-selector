@@ -441,6 +441,34 @@ test('GPT group uses strict pool when available and falls back when empty', () =
   assert.deepEqual(cfgEmpty['proxy-groups'].find((g) => g.name === 'GPT-严选').proxies, ['REJECT']);
 });
 
+test('Generated config exposes transparent proxy ports and domain sniffer for mobile TPROXY', () => {
+  const cfg = GroupBuilder.buildFromProbedNodes([{
+    success: true,
+    egress_ip: '1.2.3.4',
+    country_code: 'SG',
+    city: 'Singapore',
+    asn: 14061,
+    facility_name: 'DigitalOcean',
+    facility_confidence: 'A',
+    gemini_status: 'PASS',
+    gemini_tier: 'STRICT',
+    antigravity_tier: 'STRICT',
+    google_tier: 'STRICT',
+    claude_tier: 'STRICT',
+    gpt_tier: 'STRICT',
+    meta: { proxyDict: { name: 'sg', type: 'hysteria2', server: '1.2.3.4', port: 443, password: 'p' } },
+  }]);
+
+  assert.equal(cfg['redir-port'], 7892);
+  assert.equal(cfg['tproxy-port'], 7893);
+  assert.equal(cfg['dns'].listen, '0.0.0.0:1053');
+  assert.equal(cfg['external-controller'], '127.0.0.1:9090');
+  assert.equal(cfg.sniffer.enable, true);
+  assert.equal(cfg.sniffer['parse-pure-ip'], true);
+  assert.deepEqual(cfg.sniffer.sniff.TLS.ports, [443, 8443]);
+  assert.deepEqual(ConfigValidator.validateStructure(cfg), []);
+});
+
 test('Orchestrator deduplicates concurrent refreshes and falls back to last valid YAML on error', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gns-test-'));
   try {

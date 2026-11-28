@@ -480,6 +480,8 @@ export class GroupBuilder {
     return {
       port: 7890,
       'socks-port': 7891,
+      'redir-port': 7892,
+      'tproxy-port': 7893,
       'mixed-port': 7890,
       'allow-lan': false,
       mode: 'rule',
@@ -488,6 +490,24 @@ export class GroupBuilder {
       'external-controller': '127.0.0.1:9090',
       'tcp-concurrent': true,
       'unified-delay': true,
+      sniffer: {
+        enable: true,
+        'force-dns-mapping': true,
+        'parse-pure-ip': true,
+        'override-destination': false,
+        sniff: {
+          HTTP: {
+            ports: [80, '8080-8880'],
+            'override-destination': true,
+          },
+          TLS: {
+            ports: [443, 8443],
+          },
+          QUIC: {
+            ports: [443, 8443],
+          },
+        },
+      },
       dns: {
         enable: true,
         listen: '0.0.0.0:1053',
